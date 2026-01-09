@@ -10,6 +10,7 @@ export default function Loading() {
                     src="https://lottie.host/d8d7a317-458c-4060-9f16-f6fe945783fa/SIv2ZZXtTr.lottie"
                     loop
                     autoplay
+                    style={{ width: '100%', height: '100%' }}
                 />
             </div>
             <h2 className="mt-4 text-2xl font-bold font-mono text-stone-900 tracking-tighter animate-pulse">

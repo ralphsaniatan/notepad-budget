@@ -21,7 +21,7 @@ export async function signIn(formData: FormData) {
         if (profile?.email) {
             email = profile.email;
         } else {
-            return { error: "Username not found. Please try your email." };
+            return { error: "Username not recognized. If this is your first time, please Login with Email, or Sign Up again." };
         }
     }
 
