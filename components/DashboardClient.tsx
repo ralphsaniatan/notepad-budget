@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { DollarSign, ArrowRight, Wallet, AlertCircle, Plus, Minus, CreditCard, List, Archive } from "lucide-react";
-import { addTransaction, addDebt, closeMonth } from "@/app/actions";
+import { addTransaction, closeMonth } from "@/app/actions";
 import clsx from "clsx";
 import Link from "next/link";
+import { MobileAddBar } from "@/components/MobileAddBar";
 
 type DashboardData = {
     safeToSpend: number;
@@ -79,8 +79,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
     const handleCloseMonth = async () => {
         const now = new Date();
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
+        /* Check if month has passed - logic simplified for brevity */
         if (!confirm("Are you sure? This should be done at the END of the month.")) return;
 
         setIsSubmitting(true);
@@ -99,7 +98,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     };
 
     return (
-        <main className="min-h-screen p-4 md:p-6 max-w-lg mx-auto space-y-6 pb-32">
+        <main className="min-h-screen p-4 md:p-6 max-w-lg mx-auto space-y-6 pb-40">
             {/* App Header */}
             <header className="flex justify-between items-center mt-4">
                 <h1 className="font-bold text-stone-900 tracking-tight">Notepad Budget</h1>
@@ -116,18 +115,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <div className="text-5xl font-mono font-bold tracking-tighter">
                             {currency(data.safeToSpend)}
                         </div>
+                        {data.spent > 0 && <div className="mt-2 text-stone-500 text-xs font-mono">Spent: {currency(data.spent)}</div>}
                     </div>
                 </PaperCard>
-            </section>
-
-            {/* Quick Add */}
-            <section className="space-y-4">
-                <QuickAddForm
-                    categories={data.categories}
-                    debts={data.debts}
-                    onAdd={handleQuickAdd}
-                    isSubmitting={isSubmitting}
-                />
             </section>
 
             {/* Transactions List */}
@@ -191,115 +181,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     Close Current Month
                 </button>
             </section>
+
+            {/* Persistent Mobile Add Bar */}
+            <MobileAddBar
+                categories={data.categories}
+                debts={data.debts}
+                onAdd={handleQuickAdd}
+                isSubmitting={isSubmitting}
+            />
         </main>
     );
-}
-
-function QuickAddForm({ categories, debts, onAdd, isSubmitting }: {
-    categories: { id: string, name: string }[],
-    debts: { id: string, name: string }[],
-    onAdd: (type: TxType, amount: string, targetId?: string, desc?: string) => void,
-    isSubmitting: boolean
-}) {
-    const [amount, setAmount] = useState("");
-    const [description, setDescription] = useState("");
-    const [targetId, setTargetId] = useState("");
-    const [type, setType] = useState<TxType>('expense');
-
-    const handleSubmit = () => {
-        onAdd(type, amount, targetId, description);
-        setAmount("");
-        setDescription("");
-        setTargetId("");
-        setType('expense');
-    };
-
-    return (
-        <PaperCard className="p-4 space-y-3">
-            {/* Amount Input */}
-            <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 font-mono text-xl">$</span>
-                <input
-                    type="number"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                    className="w-full pl-8 pr-4 py-2 bg-transparent border-b-2 border-stone-100 text-3xl font-mono font-bold text-stone-900 placeholder:text-stone-200 outline-none focus:border-stone-900 transition-colors"
-                />
-            </div>
-
-            {/* Type Selection */}
-            <div className="flex gap-2 text-xs">
-                <button
-                    onClick={() => { setType('expense'); setTargetId(""); }}
-                    className={clsx("px-3 py-1 rounded-full border transition-colors", type === 'expense' ? "bg-stone-900 text-white border-stone-900" : "bg-white text-stone-500 border-stone-200 hover:bg-stone-50")}
-                >Expense</button>
-                <button
-                    onClick={() => { setType('income'); setTargetId(""); }}
-                    className={clsx("px-3 py-1 rounded-full border transition-colors", type === 'income' ? "bg-green-100 text-green-700 border-green-200 font-bold" : "bg-white text-stone-500 border-stone-200 hover:bg-stone-50")}
-                >Income</button>
-                <button
-                    onClick={() => { setType('debt_payment'); setTargetId(""); }}
-                    className={clsx("px-3 py-1 rounded-full border transition-colors", type === 'debt_payment' ? "bg-blue-100 text-blue-700 border-blue-200 font-bold" : "bg-white text-stone-500 border-stone-200 hover:bg-stone-50")}
-                >Pay Debt</button>
-            </div>
-
-            {/* Details Row */}
-            <div className="flex gap-2">
-                <input
-                    type="text"
-                    placeholder="Note (optional)"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 transition-shadow focus:border-stone-300 border border-transparent"
-                />
-
-                {/* Dynamic Dropdown based on Type */}
-                {type === 'expense' && (
-                    <select
-                        value={targetId}
-                        onChange={e => setTargetId(e.target.value)}
-                        className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 text-stone-600 appearance-none bg-no-repeat bg-[right_0.5rem_center] cursor-pointer"
-                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
-                    >
-                        <option value="">Category...</option>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                )}
-
-                {type === 'debt_payment' && (
-                    <select
-                        value={targetId}
-                        onChange={e => setTargetId(e.target.value)}
-                        className="flex-1 bg-blue-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-200 text-blue-800 appearance-none font-bold cursor-pointer"
-                    >
-                        <option value="">Select Debt...</option>
-                        {debts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                )}
-
-                {type === 'income' && <div className="flex-1"></div>}
-            </div>
-
-            {/* Action Button */}
-            <div className="pt-2">
-                <button
-                    disabled={isSubmitting}
-                    onClick={handleSubmit}
-                    className={clsx(
-                        "w-full py-3 rounded font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2",
-                        type === 'expense' ? "bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-800" :
-                            type === 'income' ? "bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800" :
-                                "bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800"
-                    )}
-                >
-                    {type === 'expense' && <Minus size={16} />}
-                    {type === 'income' && <Plus size={16} />}
-                    {type === 'debt_payment' && <ArrowRight size={16} />}
-
-                    {type === 'expense' ? "Add Expense" : type === 'income' ? "Add Income" : "Record Payment"}
-                </button>
-            </div>
-        </PaperCard>
-    )
 }
