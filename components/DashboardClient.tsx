@@ -5,6 +5,7 @@ import { PaperCard } from "@/components/ui/PaperCard";
 import { DollarSign, ArrowRight, Wallet, AlertCircle, Plus, Minus, CreditCard, ChevronDown, List, X } from "lucide-react";
 import { addTransaction, addDebt, closeMonth } from "@/app/actions";
 import clsx from "clsx";
+import Link from "next/link";
 
 type DashboardData = {
     safeToSpend: number;
@@ -17,7 +18,6 @@ type DashboardData = {
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
     const [data, setData] = useState(initialData);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [showAddDebt, setShowAddDebt] = useState(false);
 
     // Sync with server data when it changes
     useEffect(() => {
@@ -67,70 +67,22 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         }
     };
 
-    const handleAddDebt = async (name: string, balanceStr: string, rateStr: string) => {
-        const balance = parseFloat(balanceStr);
-        const rate = parseFloat(rateStr);
-        if (!name || isNaN(balance)) return;
-
-        setIsSubmitting(true);
-        try {
-            const res = await addDebt(name, balance, isNaN(rate) ? 0 : rate);
-            if (res && res.success) {
-                setShowAddDebt(false);
-                // Optimistic update handled by revalidatePath usually, but we can force a reload or wait
-            }
-        } catch (err) {
-            console.error("Debt Add Error", err);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handlePayDebt = async (debtId: string, amountStr: string) => {
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount <= 0) return;
-
-        setIsSubmitting(true);
-
-        setData(prev => ({
-            ...prev,
-            safeToSpend: prev.safeToSpend - amount,
-            spent: prev.spent + amount,
-            debts: prev.debts.map(d => d.id === debtId ? { ...d, total_balance: d.total_balance - amount } : d)
-        }));
-
-        try {
-            await addTransaction(amount, "Debt Payment", "debt_payment", undefined, debtId);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     const handleCloseMonth = async () => {
         // Check if month has passed
         const now = new Date();
-        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        // Logic check: We can only close if "now" is effectively "later than the month we are viewing".
-        // But for MVP, let's just warn broadly. The server should ideally block it if we want strict enforcement.
-        // User asked: "close and roll over only after the month has passed"
-        // If today is Jan 9, we shouldn't close Jan.
-
-        // We will perform a check on the client for UX.
+        // Simple client check same as server
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        const isEnd = now.getDate() > daysInMonth; // Impossible
-        // Actually we just check if we are in a new month compared to the "Active Month".
-        // Since this app always loads "Current Month" based on real time, we can't really "view" Jan in Feb unless we have month navigation.
-        // So typically, "Close Month" appears when you open the app on Feb 1st and it sees Jan is still "Active".
-        // FOR THIS MVP: We will simply show the button but add a strict confirmation or check.
 
         if (!confirm("Are you sure? This should be done at the END of the month.")) return;
 
         setIsSubmitting(true);
         try {
-            await closeMonth();
-            alert("Month Closed!");
+            const res = await closeMonth();
+            if (res.success) {
+                alert("Month Closed!");
+            } else {
+                alert("Error: " + res.error);
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -167,7 +119,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
             {/* Transactions List */}
             <section className="space-y-2">
-                <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest px-1">Recent Transactions</h3>
+                <div className="flex justify-between items-end px-1">
+                    <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Recent Transactions</h3>
+                    <Link href="/categories" className="text-[10px] text-stone-400 underline hover:text-stone-600">
+                        Manage Categories
+                    </Link>
+                </div>
+
                 <div className="relative">
                     {/* Paper Lines Background for list */}
                     <div className="space-y-2">
@@ -192,42 +150,21 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </div>
             </section>
 
-            {/* Debts */}
-            <section className="space-y-4 pt-4 border-t border-stone-200 border-dashed">
-                <div className="flex justify-between items-end px-1">
-                    <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Debts</h3>
-                    <button
-                        onClick={() => setShowAddDebt(!showAddDebt)}
-                        className="text-xs text-stone-400 underline hover:text-stone-600"
-                    >
-                        {showAddDebt ? "Cancel" : "+ Add"}
-                    </button>
-                </div>
-
-                {showAddDebt && (
-                    <AddDebtForm onAdd={handleAddDebt} isSubmitting={isSubmitting} />
-                )}
-
-                {data.debts.length === 0 && !showAddDebt && (
-                    <p className="text-center text-xs text-stone-400 py-2">No active debts.</p>
-                )}
-
-                <div className="space-y-3">
-                    {data.debts.map(debt => (
-                        <PaperCard key={debt.id} className="relative group">
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <h4 className="font-bold text-stone-800 text-sm">{debt.name}</h4>
-                                    <p className="text-[10px] text-stone-400">{debt.interest_rate}% APR</p>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-lg font-mono font-bold text-stone-800">{currency(debt.total_balance)}</div>
-                                </div>
+            {/* Debts Summary Link */}
+            <section className="pt-4 border-t border-stone-200 border-dashed">
+                <Link href="/debts">
+                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer">
+                        <div className="p-4 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest mb-1">Total Debt</h3>
+                                <p className="text-stone-400 text-[10px] group-hover:text-stone-600 transition-colors">Manage {data.debts.length} Trackers &rarr;</p>
                             </div>
-                            <PayDebtInline onPay={(amt) => handlePayDebt(debt.id, amt)} isSubmitting={isSubmitting} />
-                        </PaperCard>
-                    ))}
-                </div>
+                            <div className="text-2xl font-mono font-bold text-stone-800">
+                                {currency(data.debts.reduce((acc, d) => acc + Number(d.total_balance), 0))}
+                            </div>
+                        </div>
+                    </PaperCard>
+                </Link>
             </section>
 
             {/* Footer / Rollover */}
@@ -276,7 +213,8 @@ function QuickAddForm({ categories, onAdd, isSubmitting }: { categories: { id: s
                 <select
                     value={categoryId}
                     onChange={e => setCategoryId(e.target.value)}
-                    className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 text-stone-600"
+                    className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 text-stone-600 appearance-none bg-no-repeat bg-[right_0.5rem_center]"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
                 >
                     <option value="">Category...</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -301,64 +239,5 @@ function QuickAddForm({ categories, onAdd, isSubmitting }: { categories: { id: s
                 </button>
             </div>
         </PaperCard>
-    )
-}
-
-function AddDebtForm({ onAdd, isSubmitting }: { onAdd: (n: string, b: string, r: string) => void, isSubmitting: boolean }) {
-    const [name, setName] = useState("");
-    const [balance, setBalance] = useState("");
-    const [rate, setRate] = useState("");
-
-    return (
-        <PaperCard className="p-4 space-y-3 bg-stone-50 border border-stone-200">
-            <input
-                type="text" placeholder="Card Name (e.g. Visa)"
-                value={name} onChange={e => setName(e.target.value)}
-                className="w-full p-2 bg-white border border-stone-200 rounded text-sm outline-none focus:border-stone-400"
-            />
-            <div className="flex gap-2">
-                <input
-                    type="number" placeholder="Current Balance"
-                    value={balance} onChange={e => setBalance(e.target.value)}
-                    className="w-1/2 p-2 bg-white border border-stone-200 rounded text-sm outline-none focus:border-stone-400"
-                />
-                <input
-                    type="number" placeholder="APR %"
-                    value={rate} onChange={e => setRate(e.target.value)}
-                    className="w-1/2 p-2 bg-white border border-stone-200 rounded text-sm outline-none focus:border-stone-400"
-                />
-            </div>
-            <button
-                onClick={() => onAdd(name, balance, rate)}
-                disabled={isSubmitting}
-                className="w-full bg-stone-900 text-white py-2 rounded text-sm font-bold hover:bg-stone-800 disabled:opacity-50"
-            >
-                Start Tracking
-            </button>
-        </PaperCard>
-    )
-}
-
-function PayDebtInline({ onPay, isSubmitting }: { onPay: (a: string) => void, isSubmitting: boolean }) {
-    const [amount, setAmount] = useState("");
-
-    return (
-        <div className="mt-4 pt-3 border-t border-stone-100 flex gap-2 items-center">
-            <span className="text-[10px] font-bold text-stone-400">PAY OFF</span>
-            <input
-                type="number"
-                placeholder="0.00"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                className="flex-1 bg-transparent text-right px-2 py-1 text-sm font-mono outline-none border-b border-stone-200 focus:border-stone-900 transition-colors"
-            />
-            <button
-                disabled={isSubmitting || !amount}
-                onClick={() => { onPay(amount); setAmount(""); }}
-                className="bg-stone-100 text-stone-600 p-1.5 rounded hover:bg-stone-200 disabled:opacity-30"
-            >
-                <ArrowRight size={14} />
-            </button>
-        </div>
     )
 }

@@ -45,7 +45,6 @@ export async function getDashboardData(): Promise<DashboardData> {
         const rollover = month?.rollover || 0;
 
         // Get recent transactions for the list
-        // Note: 'categories' is the table name, 'name' is the column
         const { data: allTransactions } = await supabase
             .from('transactions')
             .select(`
@@ -179,7 +178,7 @@ export async function addTransaction(
         }
     }
 
-    revalidatePath('/');
+    revalidatePath('/', 'layout'); // Global refresh
     return { success: true };
 }
 
@@ -202,19 +201,12 @@ export async function closeMonth() {
         if (!month) return { success: false, error: "Current month not found" };
 
         // Strict Check: Cannot close current month until next month starts
-        // We check if "now" is still within the month. 
-        // Logic: if now.getMonth() == month(isoMonth).getMonth(), then reject.
-        // Actually, let's just parse isoMonth.
         const [y, m] = isoMonth.split('-');
         if (now.getMonth() + 1 === parseInt(m) && now.getFullYear() === parseInt(y)) {
-            // We are IN the active month.
-            // However, for testing purposes or "early close", some users might want it.
-            // User explicitly requested: "close and roll over only after the month has passed"
-            // So we throw error.
             return { success: false, error: "Cannot close month until it has ended." };
         }
 
-        // Calculate Remaining Logic (Same as before)
+        // Calculate Remaining Logic
         let income = month.income || 0;
         const rollover = month.rollover || 0;
 
@@ -255,7 +247,7 @@ export async function closeMonth() {
 
         if (error) throw error;
 
-        revalidatePath('/');
+        revalidatePath('/', 'layout');
         return { success: true };
 
     } catch (e: any) {
@@ -278,7 +270,30 @@ export async function addDebt(name: string, balance: number, rate: number) {
             interest_rate: rate
         });
 
-    if (error) console.error(error);
-    revalidatePath('/');
+    if (error) console.error("Add Debt Error:", error);
+    revalidatePath('/', 'layout');
     return { success: !error };
+}
+
+export async function addCategory(name: string, is_commitment: boolean, budget_limit: number) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('categories')
+        .insert({
+            user_id: user.id,
+            name,
+            is_commitment,
+            budget_limit
+        });
+
+    if (error) {
+        console.error("Add Category Error:", error);
+        return { success: false, error: error.message };
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true };
 }
