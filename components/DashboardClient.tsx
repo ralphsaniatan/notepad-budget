@@ -16,6 +16,7 @@ type DashboardData = {
     recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string, category_id?: string, debt_id?: string }[];
     categories: { id: string, name: string }[];
     breakdown?: { income: number, rollover: number, commitments: number, spent: number };
+    userId?: string;
 };
 
 type TxType = 'expense' | 'income' | 'debt_payment';
@@ -314,12 +315,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                             </div>
                         </div>
 
-                        <p className="text-[10px] text-stone-400 text-center px-8">
-                            This is your "Safe to Spend" amount after setting aside money for fixed bills and accounting for what you've already spent.
-                        </p>
                     </div>
                 </div>
             )}
+
+            {/* Debug Footer */}
+            <footer className="text-center text-[10px] text-stone-300 font-mono py-8 select-all">
+                UID: {data.userId?.slice(-4) || '----'} | v1.18
+            </footer>
         </main>
     );
 }

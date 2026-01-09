@@ -11,6 +11,7 @@ type DashboardData = {
     recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string }[];
     categories: { id: string, name: string }[];
     breakdown?: { income: number, rollover: number, commitments: number, spent: number };
+    userId?: string;
 };
 
 // Fallback for initial state or error
@@ -141,7 +142,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
                 rollover,
                 commitments: totalCommitments,
                 spent: spentVariable
-            }
+            },
+            userId: user.id
         };
 
     } catch (error) {
