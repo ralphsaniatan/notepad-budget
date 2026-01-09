@@ -278,45 +278,47 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 />
             )}
 
-            {/* Breakdown Sheet */}
+            {/* Breakdown Popover (Replaces Fixed Modal) */}
             {showBreakdown && data.breakdown && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-lg font-bold text-stone-900">Calculated Budget</h2>
-                            <button onClick={() => setShowBreakdown(false)} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
-                                <X size={20} />
-                            </button>
+                <div
+                    onClick={() => setShowBreakdown(false)}
+                    className="fixed inset-0 z-40 bg-transparent cursor-default"
+                >
+                    {/* Backdrop for click-away */}
+                </div>
+            )}
+
+            {showBreakdown && data.breakdown && (
+                <div className="absolute top-24 left-1/2 -translate-x-1/2 w-11/12 max-w-sm z-50 animate-in fade-in zoom-in duration-200 shadow-2xl rounded-2xl overflow-hidden ring-4 ring-stone-900/5">
+                    <div className="bg-white p-6 space-y-4 text-stone-900">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-xs uppercase font-bold text-stone-400 tracking-widest">Budget Math</h4>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2">
-                                <span className="text-stone-500">Monthly Income</span>
-                                <span className="font-mono font-bold text-green-600">+{currency(data.breakdown.income)}</span>
+                        <div className="space-y-2 font-mono text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-stone-500">Income</span>
+                                <span className="font-bold text-green-600">+{currency(data.breakdown.income)}</span>
                             </div>
-                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2">
-                                <span className="text-stone-500">Rollover from Prev. Month</span>
-                                <span className={clsx("font-mono font-bold", data.breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
+                            <div className="flex justify-between">
+                                <span className="text-stone-500">Rollover</span>
+                                <span className={clsx("font-bold", data.breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
                                     {data.breakdown.rollover >= 0 ? '+' : ''}{currency(data.breakdown.rollover)}
                                 </span>
                             </div>
-                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2">
-                                <span className="text-stone-500">Fixed Bills (Commitments)</span>
-                                <span className="font-mono font-bold text-stone-800">-{currency(data.breakdown.commitments)}</span>
+                            <div className="flex justify-between">
+                                <span className="text-stone-500">Fixed Bills</span>
+                                <span className="font-bold text-stone-700">-{currency(data.breakdown.commitments)}</span>
                             </div>
-                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2 mb-4">
-                                <span className="text-stone-500">Variable Spent</span>
-                                <span className="font-mono font-bold text-red-600">-{currency(data.breakdown.spent)}</span>
-                            </div>
-
-                            <div className="flex justify-between items-center pt-2 border-t-2 border-stone-900">
-                                <span className="font-bold text-stone-900 text-lg">Safe to Spend</span>
-                                <span className={clsx("font-mono font-bold text-xl", data.safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
-                                    {currency(data.safeToSpend)}
-                                </span>
+                            <div className="flex justify-between pt-2 border-t border-stone-100">
+                                <span className="text-stone-500">Spent</span>
+                                <span className="font-bold text-red-600">-{currency(data.breakdown.spent)}</span>
                             </div>
                         </div>
 
+                        <div className="pt-3 border-t-2 border-stone-900 lg:hidden text-center">
+                            <div className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">Tap anywhere to close</div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -333,7 +335,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
                 <div className="text-[10px] text-stone-300 font-mono select-all">
                     {data.email} <br />
-                    UID: {data.userId?.slice(-4) || '----'} | v1.22.1
+                    UID: {data.userId?.slice(-4) || '----'} | v1.22.2
                 </div>
             </footer>
         </main>

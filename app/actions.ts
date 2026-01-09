@@ -46,9 +46,15 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             .eq('iso_month', isoMonth)
             .single();
 
+        // Safety Helper
+        const safeNum = (val: any) => {
+            const n = Number(val);
+            return isNaN(n) ? 0 : n;
+        };
+
         // 2. Data Aggregation
-        let income = month?.income || 0;
-        const rollover = month?.rollover || 0;
+        let income = safeNum(month?.income);
+        const rollover = safeNum(month?.rollover);
 
         // Get recent transactions for the list
         const { data: allTransactions } = await supabase
@@ -68,16 +74,17 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         let spentVariable = 0;
 
         transactions.forEach((tx: any) => {
+            const amount = safeNum(tx.amount);
             if (tx.type === 'income') {
-                income += Number(tx.amount);
+                income += amount;
             } else if (tx.type === 'expense') {
                 const isCommitment = tx.categories?.is_commitment;
                 if (!isCommitment) {
-                    spentVariable += Number(tx.amount);
+                    spentVariable += amount;
                 }
             }
             else if (tx.type === 'debt_payment') {
-                spentVariable += Number(tx.amount);
+                spentVariable += amount;
             }
         });
 
@@ -88,7 +95,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             .eq('user_id', user.id)
             .eq('is_commitment', true);
 
-        const totalCommitments = committedCategories?.reduce((sum, cat) => sum + Number(cat.budget_limit), 0) || 0;
+        const totalCommitments = committedCategories?.reduce((sum, cat) => sum + safeNum(cat.budget_limit), 0) || 0;
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable;
 
         // 4. Get Debts

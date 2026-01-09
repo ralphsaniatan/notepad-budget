@@ -80,28 +80,29 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         </div>
 
                         <div className="space-y-4">
+                            {/* Amount (Moved to Top) */}
+                            <div className="space-y-2">
+                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Amount (AED)</label>
+                                <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    autoFocus
+                                    inputMode="decimal"
+                                    value={amount}
+                                    onChange={e => setAmount(e.target.value)}
+                                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-2xl font-mono font-bold outline-none focus:border-stone-900"
+                                />
+                            </div>
+
                             {/* Detailed Description */}
                             <div className="space-y-2">
                                 <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Description</label>
                                 <input
                                     type="text"
                                     placeholder="e.g. Groceries"
-                                    autoFocus
                                     value={description}
                                     onChange={e => setDescription(e.target.value)}
                                     className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
-                                />
-                            </div>
-
-                            {/* Amount */}
-                            <div className="space-y-2">
-                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Amount (AED)</label>
-                                <input
-                                    type="number"
-                                    placeholder="0.00"
-                                    value={amount}
-                                    onChange={e => setAmount(e.target.value)}
-                                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
                                 />
                             </div>
 
