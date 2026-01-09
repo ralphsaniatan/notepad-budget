@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Pencil } from "lucide-react";
 import { addDebt } from "@/app/actions";
 import clsx from "clsx";
 
@@ -22,9 +22,8 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
 
-    const handleAddDebt = async (name: string, balanceStr: string, rateStr: string) => {
+    const handleAddDebt = async (name: string, balanceStr: string) => {
         const balance = parseFloat(balanceStr);
-        const rate = parseFloat(rateStr);
         if (!name || isNaN(balance)) return;
 
         setIsSubmitting(true);
@@ -33,13 +32,13 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
             id: Math.random().toString(),
             name,
             total_balance: balance,
-            interest_rate: isNaN(rate) ? 0 : rate
+            interest_rate: 0
         };
         setDebts(prev => [newDebt, ...prev]);
         setShowAddForm(false);
 
         try {
-            await addDebt(name, balance, isNaN(rate) ? 0 : rate);
+            await addDebt(name, balance, 0);
         } catch (err) {
             console.error("Failed to add debt", err);
         } finally {
@@ -62,25 +61,29 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
                         <div className="flex justify-between items-center" onClick={() => setEditingDebt(debt)}>
                             <div>
                                 <h4 className={clsx("font-bold text-stone-900 text-xl", debt.total_balance <= 0 && "line-through decoration-red-600 decoration-4 -rotate-2 opacity-60")}>{debt.name}</h4>
-                                <p className="text-xs text-stone-400 font-mono mt-1 font-bold">{debt.interest_rate}% APR</p>
                             </div>
-                            <div className="text-right">
-                                <div className={clsx("text-2xl font-mono font-bold", debt.total_balance <= 0 ? "text-stone-300" : "text-stone-800")}>{currency(debt.total_balance)}</div>
-                                <div className="text-[10px] text-stone-300 uppercase tracking-widest mt-1">Outstanding</div>
+                            <div className="text-right flex items-center gap-4">
+                                <div>
+                                    <div className={clsx("text-2xl font-mono font-bold", debt.total_balance <= 0 ? "text-stone-300" : "text-stone-800")}>{currency(debt.total_balance)}</div>
+                                    <div className="text-[10px] text-stone-300 uppercase tracking-widest mt-1">Outstanding</div>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); setEditingDebt(debt); }} className="p-2 text-stone-300 hover:text-stone-600 hover:bg-stone-100 rounded-full transition-colors">
+                                    <Pencil size={18} />
+                                </button>
                             </div>
                         </div>
                     </PaperCard>
                 ))}
             </div>
 
-            {/* Persistent Add Button */}
+            {/* Persistent Floating Add Button (Pill Style) */}
             {!showAddForm && !editingDebt && (
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-8 z-40">
+                <div className="fixed bottom-6 right-6 z-40">
                     <button
                         onClick={() => setShowAddForm(true)}
-                        className="w-full bg-stone-900 text-white shadow-xl py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 hover:bg-black transition-transform active:scale-95"
+                        className="bg-stone-900 text-white shadow-xl px-6 py-4 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-black transition-transform active:scale-95"
                     >
-                        <Plus size={20} /> Add New Debt
+                        <Plus size={20} /> Add Debt
                     </button>
                 </div>
             )}
@@ -111,10 +114,9 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
     );
 }
 
-function AddDebtForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, b: string, r: string) => void, onClose: () => void, isSubmitting: boolean }) {
+function AddDebtForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, b: string) => void, onClose: () => void, isSubmitting: boolean }) {
     const [name, setName] = useState("");
     const [balance, setBalance] = useState("");
-    const [rate, setRate] = useState("");
 
     return (
         <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
@@ -137,28 +139,18 @@ function AddDebtForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, b: s
                     />
                 </div>
 
-                <div className="flex gap-4">
-                    <div className="space-y-2 flex-1">
-                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Current Balance</label>
-                        <input
-                            type="number" placeholder="0.00"
-                            value={balance} onChange={e => setBalance(e.target.value)}
-                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
-                        />
-                    </div>
-                    <div className="space-y-2 w-1/3">
-                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">APR %</label>
-                        <input
-                            type="number" placeholder="0.0"
-                            value={rate} onChange={e => setRate(e.target.value)}
-                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
-                        />
-                    </div>
+                <div className="space-y-2">
+                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Current Balance</label>
+                    <input
+                        type="number" placeholder="0.00"
+                        value={balance} onChange={e => setBalance(e.target.value)}
+                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                    />
                 </div>
             </div>
 
             <button
-                onClick={() => onAdd(name, balance, rate)}
+                onClick={() => onAdd(name, balance)}
                 disabled={isSubmitting || !name || !balance}
                 className="w-full bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
             >
@@ -174,15 +166,13 @@ import { updateDebt, deleteDebt } from "@/app/actions";
 function EditDebtSheet({ debt, onClose, onUpdate, onDelete }: { debt: Debt, onClose: () => void, onUpdate: (d: Debt) => void, onDelete: (id: string) => void }) {
     const [name, setName] = useState(debt.name);
     const [balance, setBalance] = useState(debt.total_balance.toString());
-    const [rate, setRate] = useState(debt.interest_rate.toString());
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSave = async () => {
         setIsSubmitting(true);
         const b = parseFloat(balance) || 0;
-        const r = parseFloat(rate) || 0;
-        await updateDebt(debt.id, name, b, r);
-        onUpdate({ ...debt, name, total_balance: b, interest_rate: r });
+        await updateDebt(debt.id, name, b, 0); // Always 0 rate
+        onUpdate({ ...debt, name, total_balance: b, interest_rate: 0 });
         setIsSubmitting(false);
     };
 
@@ -212,21 +202,12 @@ function EditDebtSheet({ debt, onClose, onUpdate, onDelete }: { debt: Debt, onCl
                             className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
                         />
                     </div>
-                    <div className="flex gap-4">
-                        <div className="space-y-2 flex-1">
-                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Current Balance</label>
-                            <input
-                                type="number" value={balance} onChange={e => setBalance(e.target.value)}
-                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
-                            />
-                        </div>
-                        <div className="space-y-2 w-1/3">
-                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">APR %</label>
-                            <input
-                                type="number" value={rate} onChange={e => setRate(e.target.value)}
-                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
-                            />
-                        </div>
+                    <div className="space-y-2">
+                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Current Balance</label>
+                        <input
+                            type="number" value={balance} onChange={e => setBalance(e.target.value)}
+                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                        />
                     </div>
                 </div>
 
