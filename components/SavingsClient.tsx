@@ -86,6 +86,11 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                 ) : (
                     goals.map(g => {
                         const progress = Math.min(100, (g.current_amount / g.target_amount) * 100);
+
+                        let barColor = "bg-red-500";
+                        if (progress >= 33) barColor = "bg-yellow-500";
+                        if (progress >= 66) barColor = "bg-green-500";
+
                         return (
                             <PaperCard key={g.id} className="p-6 relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-4">
@@ -104,7 +109,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                                 {/* Progress Bar */}
                                 <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden mb-3">
                                     <div
-                                        className="h-full bg-stone-800 transition-all duration-500 rounded-full"
+                                        className={clsx("h-full transition-all duration-500 rounded-full", barColor)}
                                         style={{ width: `${progress}%` }}
                                     ></div>
                                 </div>
