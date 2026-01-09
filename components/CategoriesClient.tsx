@@ -20,6 +20,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
     const [newName, setNewName] = useState("");
     const [isCommitment, setIsCommitment] = useState(false);
     const [budgetLimit, setBudgetLimit] = useState("");
+    const [editingCat, setEditingCat] = useState<Category | null>(null);
 
     const handleAdd = async () => {
         if (!newName) return;
@@ -90,8 +91,8 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
             <div className="space-y-2">
                 <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest px-1">Active Categories</h3>
                 {categories.map(cat => (
-                    <div key={cat.id} className="flex justify-between items-center p-3 bg-white border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors">
-                        <div>
+                    <div key={cat.id} className="flex justify-between items-center p-3 bg-white border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors group">
+                        <div onClick={() => setEditingCat(cat)} className="flex-1 cursor-pointer">
                             <span className="font-bold text-stone-800 text-sm">{cat.name}</span>
                             {cat.is_commitment && (
                                 <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
@@ -99,9 +100,114 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                 </span>
                             )}
                         </div>
+                        <button onClick={() => setEditingCat(cat)} className="text-stone-300 hover:text-stone-600 px-2">
+                            <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
+                        </button>
                     </div>
                 ))}
             </div>
-        </section>
+
+            {/* Edit Sheet */}
+            {
+                editingCat && (
+                    <EditCategorySheet
+                        category={editingCat}
+                        onClose={() => setEditingCat(null)}
+                        onUpdate={(updated) => {
+                            setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
+                            setEditingCat(null);
+                        }}
+                        onDelete={(id) => {
+                            setCategories(prev => prev.filter(c => c.id !== id));
+                            setEditingCat(null);
+                        }}
+                    />
+                )
+            }
+        </section >
+    );
+}
+
+import { updateCategory, deleteCategory } from "@/app/actions";
+import { X } from "lucide-react";
+
+function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category: Category, onClose: () => void, onUpdate: (c: Category) => void, onDelete: (id: string) => void }) {
+    const [name, setName] = useState(category.name);
+    const [isCommitment, setIsCommitment] = useState(category.is_commitment);
+    const [budgetLimit, setBudgetLimit] = useState(category.budget_limit.toString());
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSave = async () => {
+        setIsSubmitting(true);
+        const limit = parseFloat(budgetLimit) || 0;
+        await updateCategory(category.id, name, isCommitment, limit);
+        onUpdate({ ...category, name, is_commitment: isCommitment, budget_limit: limit });
+        setIsSubmitting(false);
+    };
+
+    const handleDelete = async () => {
+        if (!confirm("Delete this category? Transactions will become uncategorized.")) return;
+        setIsSubmitting(true);
+        await deleteCategory(category.id);
+        onDelete(category.id);
+        setIsSubmitting(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-stone-900">Edit Category</h2>
+                    <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <input
+                        type="text" value={name} onChange={e => setName(e.target.value)}
+                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                    />
+                    <div className="flex items-center gap-4 py-2">
+                        <label className="flex items-center gap-2 text-sm text-stone-600 font-bold">
+                            <input
+                                type="checkbox"
+                                checked={isCommitment}
+                                onChange={e => setIsCommitment(e.target.checked)}
+                                className="rounded border-stone-300 text-stone-900 focus:ring-stone-900"
+                            />
+                            Fixed Bill / Commitment
+                        </label>
+                    </div>
+                    {isCommitment && (
+                        <div className="space-y-2">
+                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Budget Limit</label>
+                            <input
+                                type="number"
+                                value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
+                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                            />
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                    <button
+                        onClick={handleDelete}
+                        disabled={isSubmitting}
+                        className="flex-1 bg-red-50 text-red-600 py-4 rounded-xl text-lg font-bold hover:bg-red-100 transition-colors"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={isSubmitting}
+                        className="flex-[2] bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95"
+                    >
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }

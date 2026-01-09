@@ -479,3 +479,79 @@ export async function contributeToSavings(goalId: string, amount: number, goalNa
     revalidatePath('/', 'layout'); // Update dashboard safe-to-spend
     return { success: true };
 }
+
+// --- Category Management ---
+
+export async function updateCategory(id: string, name: string, is_commitment: boolean, budget_limit: number) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('categories')
+        .update({ name, is_commitment, budget_limit })
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/', 'layout');
+    revalidatePath('/categories');
+    return { success: true };
+}
+
+export async function deleteCategory(id: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // Check usage? Ideally yes, but for MVP we might just let foreign keys handle it (set null or cascade)
+    // Our schema: category_id references categories(id) on delete set null. So transactions become "uncategorized".
+    // Safe to delete.
+
+    const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/', 'layout');
+    revalidatePath('/categories');
+    return { success: true };
+}
+
+// --- Debt Management ---
+
+export async function updateDebt(id: string, name: string, balance: number, rate: number) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('debts')
+        .update({ name, total_balance: balance, interest_rate: rate })
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/', 'layout');
+    revalidatePath('/debts');
+    return { success: true };
+}
+
+export async function deleteDebt(id: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('debts')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/', 'layout');
+    revalidatePath('/debts');
+    return { success: true };
+}

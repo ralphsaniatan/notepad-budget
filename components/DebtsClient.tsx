@@ -17,6 +17,7 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
     const [debts, setDebts] = useState<Debt[]>(initialDebts);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
+    const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
 
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
@@ -57,8 +58,8 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
 
             <div className="space-y-4">
                 {debts.map(debt => (
-                    <PaperCard key={debt.id} className="relative group p-6">
-                        <div className="flex justify-between items-center">
+                    <PaperCard key={debt.id} className="relative group p-6 hover:shadow-md cursor-pointer transition-shadow" >
+                        <div className="flex justify-between items-center" onClick={() => setEditingDebt(debt)}>
                             <div>
                                 <h4 className={clsx("font-bold text-stone-900 text-xl", debt.total_balance <= 0 && "line-through decoration-red-600 decoration-4 -rotate-2 opacity-60")}>{debt.name}</h4>
                                 <p className="text-xs text-stone-400 font-mono mt-1 font-bold">{debt.interest_rate}% APR</p>
@@ -73,7 +74,7 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
             </div>
 
             {/* Persistent Add Button */}
-            {!showAddForm && (
+            {!showAddForm && !editingDebt && (
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-8 z-40">
                     <button
                         onClick={() => setShowAddForm(true)}
@@ -89,6 +90,22 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
                 <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <AddDebtForm onAdd={handleAddDebt} onClose={() => setShowAddForm(false)} isSubmitting={isSubmitting} />
                 </div>
+            )}
+
+            {/* Edit Sheet */}
+            {editingDebt && (
+                <EditDebtSheet
+                    debt={editingDebt}
+                    onClose={() => setEditingDebt(null)}
+                    onUpdate={(updated) => {
+                        setDebts(prev => prev.map(d => d.id === updated.id ? updated : d));
+                        setEditingDebt(null);
+                    }}
+                    onDelete={(id) => {
+                        setDebts(prev => prev.filter(d => d.id !== id));
+                        setEditingDebt(null);
+                    }}
+                />
             )}
         </section>
     );
@@ -150,4 +167,86 @@ function AddDebtForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, b: s
             <div className="h-8"></div>
         </div>
     )
+}
+
+import { updateDebt, deleteDebt } from "@/app/actions";
+
+function EditDebtSheet({ debt, onClose, onUpdate, onDelete }: { debt: Debt, onClose: () => void, onUpdate: (d: Debt) => void, onDelete: (id: string) => void }) {
+    const [name, setName] = useState(debt.name);
+    const [balance, setBalance] = useState(debt.total_balance.toString());
+    const [rate, setRate] = useState(debt.interest_rate.toString());
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSave = async () => {
+        setIsSubmitting(true);
+        const b = parseFloat(balance) || 0;
+        const r = parseFloat(rate) || 0;
+        await updateDebt(debt.id, name, b, r);
+        onUpdate({ ...debt, name, total_balance: b, interest_rate: r });
+        setIsSubmitting(false);
+    };
+
+    const handleDelete = async () => {
+        if (!confirm("Stop tracking this debt? History will remain but it will be removed from this list.")) return;
+        setIsSubmitting(true);
+        await deleteDebt(debt.id);
+        onDelete(debt.id);
+        setIsSubmitting(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-stone-900">Edit Debt</h2>
+                    <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Card / Loan Name</label>
+                        <input
+                            type="text" value={name} onChange={e => setName(e.target.value)}
+                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                        />
+                    </div>
+                    <div className="flex gap-4">
+                        <div className="space-y-2 flex-1">
+                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Current Balance</label>
+                            <input
+                                type="number" value={balance} onChange={e => setBalance(e.target.value)}
+                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                            />
+                        </div>
+                        <div className="space-y-2 w-1/3">
+                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">APR %</label>
+                            <input
+                                type="number" value={rate} onChange={e => setRate(e.target.value)}
+                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                    <button
+                        onClick={handleDelete}
+                        disabled={isSubmitting}
+                        className="flex-1 bg-red-50 text-red-600 py-4 rounded-xl text-lg font-bold hover:bg-red-100 transition-colors"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={isSubmitting}
+                        className="flex-[2] bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95"
+                    >
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }
