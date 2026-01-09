@@ -14,7 +14,7 @@ export default function Loading() {
     }, []);
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-white text-center">
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
             <div className="relative w-[300px] h-[300px]">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
                     <Image
