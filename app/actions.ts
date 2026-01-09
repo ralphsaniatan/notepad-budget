@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "./supabase-server";
+import { createClient } from "@/lib/supabase-server";
 
 // Fallback Mock Data for when DB is not connected
 const MOCK_DASHBOARD = {
@@ -35,7 +35,7 @@ export async function getDashboardData() {
     }
 }
 
-export async function addTransaction(amount: number, description: string, type: 'expense' | 'income') {
+export async function addTransaction(amount: number, description: string, type: 'expense' | 'income' | 'debt_payment') {
     const supabase = await createClient();
 
     // TODO: Insert into 'transactions' table
