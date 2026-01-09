@@ -209,158 +209,161 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     };
 
     return (
-        <main
-            className="min-h-screen p-4 md:p-6 max-w-lg mx-auto space-y-6 pb-40 relative transition-transform duration-200 ease-out"
-            style={{ transform: `translateY(${pullChange}px)` }}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-        >
-            {/* Refresh Indicator */}
-            <div
-                className="absolute top-0 left-0 right-0 flex justify-center -mt-10 pointer-events-none"
-                style={{ opacity: Math.min(1, pullChange / 50) }}
+        <>
+            <main
+                className="min-h-screen p-4 md:p-6 max-w-lg mx-auto space-y-6 pb-40 relative transition-transform duration-200 ease-out"
+                style={{ transform: `translateY(${pullChange}px)` }}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
             >
-                <span className="text-xs font-bold uppercase tracking-widest text-stone-400">
-                    {isRefreshing ? "Refreshing..." : pullChange > 100 ? "Release to Refresh" : "Pull to Refresh"}
-                </span>
-            </div>
-
-            {/* App Header */}
-            <header className="flex justify-between items-center mt-4">
-                <h1 className="font-bold text-stone-900 tracking-tight text-xl">Notepad Budget</h1>
-                <div className="flex items-center gap-2">
-                    <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&larr;</button>
-                    <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
-                        {currentMonthName}
+                {/* Refresh Indicator */}
+                <div
+                    className="absolute top-0 left-0 right-0 flex justify-center -mt-10 pointer-events-none"
+                    style={{ opacity: Math.min(1, pullChange / 50) }}
+                >
+                    <span className="text-xs font-bold uppercase tracking-widest text-stone-400">
+                        {isRefreshing ? "Refreshing..." : pullChange > 100 ? "Release to Refresh" : "Pull to Refresh"}
                     </span>
-                    <button onClick={() => changeMonth(1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&rarr;</button>
                 </div>
-            </header>
 
-            {/* Hero Card */}
-            <section>
-                <PaperCard className="bg-white text-stone-900 border-stone-200 shadow-xl transition-transform hover:scale-[1.01] relative">
-                    {/* Info Icon */}
-                    <button
-                        onClick={() => setShowBreakdown(true)}
-                        className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-colors"
-                    >
-                        <Info size={20} />
-                    </button>
-
-                    <div className="flex flex-col items-center justify-center p-6 py-10">
-                        <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
-                            Safe to Spend
+                {/* App Header */}
+                <header className="flex justify-between items-center mt-4">
+                    <h1 className="font-bold text-stone-900 tracking-tight text-xl">Notepad Budget</h1>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&larr;</button>
+                        <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
+                            {currentMonthName}
                         </span>
-                        <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
-                            <span className="text-xl md:text-2xl opacity-60">AED</span>
-                            <span className="text-5xl md:text-6xl">
-                                {data.safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                        </div>
-                        {data.spent > 0 && <div className="mt-4 bg-red-100 border border-red-200 text-red-700 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
+                        <button onClick={() => changeMonth(1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&rarr;</button>
                     </div>
-                </PaperCard>
-            </section>
+                </header>
 
-            {/* Tracked Budgets (Envelopes) */}
-            <div className="mt-8">
-                <TrackedBudgetList />
-            </div>
+                {/* Hero Card */}
+                <section>
+                    <PaperCard className="bg-white text-stone-900 border-stone-200 shadow-xl transition-transform hover:scale-[1.01] relative">
+                        {/* Info Icon */}
+                        <button
+                            onClick={() => setShowBreakdown(true)}
+                            className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-colors"
+                        >
+                            <Info size={20} />
+                        </button>
 
-            {/* Transactions List */}
-            <section className="space-y-3">
-                <div className="flex justify-between items-end px-2">
-                    <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Recent Transactions</h3>
-                    <Link href="/categories" className="text-[10px] text-stone-400 underline hover:text-stone-600 font-mono">
-                        Manage Categories
-                    </Link>
+                        <div className="flex flex-col items-center justify-center p-6 py-10">
+                            <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
+                                Safe to Spend
+                            </span>
+                            <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
+                                <span className="text-xl md:text-2xl opacity-60">AED</span>
+                                <span className="text-5xl md:text-6xl">
+                                    {data.safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                            {data.spent > 0 && <div className="mt-4 bg-red-100 border border-red-200 text-red-700 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
+                        </div>
+                    </PaperCard>
+                </section>
+
+                {/* Tracked Budgets (Envelopes) */}
+                <div className="mt-8">
+                    <TrackedBudgetList />
                 </div>
 
-                <div className="relative">
-                    <div className="space-y-2">
-                        {transactions.length === 0 ? (
-                            <p className="text-stone-300 text-sm p-8 text-center italic border-2 border-dashed border-stone-200 rounded-xl">
-                                No transactions yet.<br /><span className="text-xs">Tap + to add one.</span>
-                            </p>
-                        ) : (
-                            <>
-                                {transactions.map(tx => (
-                                    <div
-                                        key={tx.id}
-                                        onClick={() => setEditingTx(tx)}
-                                        className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
-                                    >
-                                        <div>
-                                            <div className="font-bold text-stone-800 text-sm capitalize">{tx.description}</div>
-                                            <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
-                                                <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                                {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
-                                                {tx.category_name && tx.type !== 'debt_payment' ? <span className="text-stone-300">• {tx.category_name}</span> : ''}
+                {/* Transactions List */}
+                <section className="space-y-3">
+                    <div className="flex justify-between items-end px-2">
+                        <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Recent Transactions</h3>
+                        <Link href="/categories" className="text-[10px] text-stone-400 underline hover:text-stone-600 font-mono">
+                            Manage Categories
+                        </Link>
+                    </div>
+
+                    <div className="relative">
+                        <div className="space-y-2">
+                            {transactions.length === 0 ? (
+                                <p className="text-stone-300 text-sm p-8 text-center italic border-2 border-dashed border-stone-200 rounded-xl">
+                                    No transactions yet.<br /><span className="text-xs">Tap + to add one.</span>
+                                </p>
+                            ) : (
+                                <>
+                                    {transactions.map(tx => (
+                                        <div
+                                            key={tx.id}
+                                            onClick={() => setEditingTx(tx)}
+                                            className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
+                                        >
+                                            <div>
+                                                <div className="font-bold text-stone-800 text-sm capitalize">{tx.description}</div>
+                                                <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
+                                                    <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                                    {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
+                                                    {tx.category_name && tx.type !== 'debt_payment' ? <span className="text-stone-300">• {tx.category_name}</span> : ''}
+                                                </div>
+                                            </div>
+                                            <div className={clsx("font-mono font-bold text-sm", tx.type === 'income' ? "text-green-600" : "text-stone-900")}>
+                                                {tx.type === 'income' ? '+' : '-'}{currency(tx.amount)}
                                             </div>
                                         </div>
-                                        <div className={clsx("font-mono font-bold text-sm", tx.type === 'income' ? "text-green-600" : "text-stone-900")}>
-                                            {tx.type === 'income' ? '+' : '-'}{currency(tx.amount)}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
 
-                                {hasMore && (
-                                    <button
-                                        onClick={handleLoadMore}
-                                        disabled={isLoadingMore}
-                                        className="w-full py-3 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-lg transition-colors border border-dashed border-stone-200"
-                                    >
-                                        {isLoadingMore ? "Loading..." : "Load More"}
-                                    </button>
-                                )}
-                            </>
-                        )}
+                                    {hasMore && (
+                                        <button
+                                            onClick={handleLoadMore}
+                                            disabled={isLoadingMore}
+                                            className="w-full py-3 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-lg transition-colors border border-dashed border-stone-200"
+                                        >
+                                            {isLoadingMore ? "Loading..." : "Load More"}
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
-                </div>
-            </section>
-
-            {/* Savings & Debts Links */}
-            <section className="pt-4 border-t border-stone-200 border-dashed grid grid-cols-2 gap-4">
-                <Link href="/savings">
-                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
-                        <div className="flex flex-col justify-between h-full min-h-[100px]">
-                            <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Future Expenses</h3>
-                            <div className="text-lg font-bold text-stone-800 flex items-center gap-1">
-                                Planning &rarr;
-                            </div>
-                        </div>
-                    </PaperCard>
-                </Link>
-
-                <Link href="/debts">
-                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
-                        <div className="flex flex-col justify-between h-full min-h-[100px]">
-                            <div>
-                                <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total Debt</h3>
-                            </div>
-                            <div className="text-lg font-mono font-bold text-stone-800 break-all leading-tight">
-                                <span className="text-xs mr-1 opacity-60">AED</span>
-                                {data.debts.reduce((acc, d) => acc + Number(d.total_balance), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                        </div>
-                    </PaperCard>
-                </Link>
-            </section>
-
-            {/* Footer / Rollover - Only Show if End of Month */}
-            {canClose && (
-                <section className="pt-8 opacity-70 hover:opacity-100 transition-opacity">
-                    <button
-                        onClick={handleCloseMonth}
-                        disabled={isSubmitting}
-                        className="w-full py-4 border-2 border-stone-200 text-xs text-stone-500 font-bold uppercase tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50 rounded-xl"
-                    >
-                        Close & Roll Over to Next Month
-                    </button>
                 </section>
-            )}
+
+                {/* Savings & Debts Links */}
+                <section className="pt-4 border-t border-stone-200 border-dashed grid grid-cols-2 gap-4">
+                    <Link href="/savings">
+                        <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
+                            <div className="flex flex-col justify-between h-full min-h-[100px]">
+                                <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Future Expenses</h3>
+                                <div className="text-lg font-bold text-stone-800 flex items-center gap-1">
+                                    Planning &rarr;
+                                </div>
+                            </div>
+                        </PaperCard>
+                    </Link>
+
+                    <Link href="/debts">
+                        <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
+                            <div className="flex flex-col justify-between h-full min-h-[100px]">
+                                <div>
+                                    <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total Debt</h3>
+                                </div>
+                                <div className="text-lg font-mono font-bold text-stone-800 break-all leading-tight">
+                                    <span className="text-xs mr-1 opacity-60">AED</span>
+                                    {data.debts.reduce((acc, d) => acc + Number(d.total_balance), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        </PaperCard>
+                    </Link>
+                </section>
+
+                {/* Footer / Rollover - Only Show if End of Month */}
+                {canClose && (
+                    <section className="pt-8 opacity-70 hover:opacity-100 transition-opacity">
+                        <button
+                            onClick={handleCloseMonth}
+                            disabled={isSubmitting}
+                            className="w-full py-4 border-2 border-stone-200 text-xs text-stone-500 font-bold uppercase tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50 rounded-xl"
+                        >
+                            Close & Roll Over to Next Month
+                        </button>
+                    </section>
+                )}
+
+            </main>
 
             {/* Persistent Mobile Add Bar */}
             <MobileAddBar
@@ -371,75 +374,65 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             />
 
             {/* Edit Sheet */}
-            {editingTx && (
-                <EditTransactionSheet
-                    transaction={editingTx}
-                    categories={data.categories}
-                    debts={data.debts.filter(d => d.total_balance > 0)}
-                    onClose={() => setEditingTx(null)}
-                />
-            )}
+            {
+                editingTx && (
+                    <EditTransactionSheet
+                        transaction={editingTx}
+                        categories={data.categories}
+                        debts={data.debts.filter(d => d.total_balance > 0)}
+                        onClose={() => setEditingTx(null)}
+                    />
+                )
+            }
 
             {/* Breakdown Popover (Replaces Fixed Modal) */}
-            {showBreakdown && data.breakdown && (
-                <div
-                    onClick={() => setShowBreakdown(false)}
-                    className="fixed inset-0 z-40 bg-transparent cursor-default"
-                >
-                    {/* Backdrop for click-away */}
-                </div>
-            )}
+            {
+                showBreakdown && data.breakdown && (
+                    <div
+                        onClick={() => setShowBreakdown(false)}
+                        className="fixed inset-0 z-40 bg-transparent cursor-default"
+                    >
+                        {/* Backdrop for click-away */}
+                    </div>
+                )
+            }
 
-            {showBreakdown && data.breakdown && (
-                <div className="absolute top-24 left-1/2 -translate-x-1/2 w-11/12 max-w-sm z-50 animate-in fade-in zoom-in duration-200 shadow-2xl rounded-2xl overflow-hidden ring-4 ring-stone-900/5">
-                    <div className="bg-white p-6 space-y-4 text-stone-900">
-                        <div className="flex justify-between items-center mb-2">
-                            <h4 className="text-xs uppercase font-bold text-stone-400 tracking-widest">Budget Math</h4>
-                        </div>
+            {
+                showBreakdown && data.breakdown && (
+                    <div className="fixed top-24 left-1/2 -translate-x-1/2 w-11/12 max-w-sm z-50 animate-in fade-in zoom-in duration-200 shadow-2xl rounded-2xl overflow-hidden ring-4 ring-stone-900/5">
+                        <div className="bg-white p-6 space-y-4 text-stone-900">
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="text-xs uppercase font-bold text-stone-400 tracking-widest">Budget Math</h4>
+                            </div>
 
-                        <div className="space-y-2 font-mono text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-stone-500">Income</span>
-                                <span className="font-bold text-green-600">+{currency(data.breakdown.income)}</span>
+                            <div className="space-y-2 font-mono text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-stone-500">Income</span>
+                                    <span className="font-bold text-green-600">+{currency(data.breakdown.income)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-stone-500">Rollover</span>
+                                    <span className={clsx("font-bold", data.breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
+                                        {data.breakdown.rollover >= 0 ? '+' : ''}{currency(data.breakdown.rollover)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-stone-500">Fixed Bills</span>
+                                    <span className="font-bold text-stone-700">-{currency(data.breakdown.commitments)}</span>
+                                </div>
+                                <div className="flex justify-between pt-2 border-t border-stone-100">
+                                    <span className="text-stone-500">Spent</span>
+                                    <span className="font-bold text-red-600">-{currency(data.breakdown.spent)}</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-stone-500">Rollover</span>
-                                <span className={clsx("font-bold", data.breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
-                                    {data.breakdown.rollover >= 0 ? '+' : ''}{currency(data.breakdown.rollover)}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-stone-500">Fixed Bills</span>
-                                <span className="font-bold text-stone-700">-{currency(data.breakdown.commitments)}</span>
-                            </div>
-                            <div className="flex justify-between pt-2 border-t border-stone-100">
-                                <span className="text-stone-500">Spent</span>
-                                <span className="font-bold text-red-600">-{currency(data.breakdown.spent)}</span>
-                            </div>
-                        </div>
 
-                        <div className="pt-3 border-t-2 border-stone-900 lg:hidden text-center">
-                            <div className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">Tap anywhere to close</div>
+                            <div className="pt-3 border-t-2 border-stone-900 lg:hidden text-center">
+                                <div className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">Tap anywhere to close</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* Debug Footer */}
-            {/* Debug Footer */}
-            <footer className="text-center py-8 space-y-4">
-                <button
-                    onClick={() => signOut()}
-                    className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors"
-                >
-                    <LogOut size={14} /> Log Out
-                </button>
-
-                <div className="text-[10px] text-stone-300 font-mono select-all">
-                    {data.email} <br />
-                    UID: {data.userId?.slice(-4) || '----'} | v1.22.3
-                </div>
-            </footer>
-        </main>
+                )
+            }
+        </>
     );
 }
