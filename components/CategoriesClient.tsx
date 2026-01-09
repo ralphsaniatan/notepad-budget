@@ -155,7 +155,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                     onChange={e => setIsPinned(e.target.checked)}
                                     className="rounded text-blue-600 focus:ring-blue-600"
                                 />
-                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Pin to Transactions Page</span>
+                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Pin to Main Budget</span>
                             </label>
                         </div>
                     )}
@@ -369,7 +369,7 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                                     onChange={e => setIsPinned(e.target.checked)}
                                     className="rounded text-blue-600 focus:ring-blue-600"
                                 />
-                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Pin to Transactions Page</span>
+                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Pin to Main Budget</span>
                             </label>
                         </div>
                     )}
