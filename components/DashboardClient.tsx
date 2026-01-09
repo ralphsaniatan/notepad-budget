@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { DollarSign, ArrowRight, Wallet, AlertCircle, Plus, Minus, CreditCard, ChevronDown, List, X } from "lucide-react";
+import { DollarSign, ArrowRight, Wallet, AlertCircle, Plus, Minus, CreditCard, List, Archive } from "lucide-react";
 import { addTransaction, addDebt, closeMonth } from "@/app/actions";
 import clsx from "clsx";
 import Link from "next/link";
@@ -15,11 +15,12 @@ type DashboardData = {
     categories: { id: string, name: string }[];
 };
 
+type TxType = 'expense' | 'income' | 'debt_payment';
+
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
     const [data, setData] = useState(initialData);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Sync with server data when it changes
     useEffect(() => {
         setData(initialData);
     }, [initialData]);
@@ -27,50 +28,57 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 
-    // Quick Add Action
-    const handleQuickAdd = async (type: 'expense' | 'income', amountStr: string, categoryId?: string, description?: string) => {
+    const handleQuickAdd = async (type: TxType, amountStr: string, targetId?: string, description?: string) => {
         if (!amountStr) return;
         const amount = parseFloat(amountStr);
         if (isNaN(amount) || amount <= 0) return;
 
         setIsSubmitting(true);
 
-        // Optimistic UI Update (Simplified for speed, revalidation will fix exact numbers)
-        // We add a fake transaction to the list immediately
+        // Determine Type-Specific IDs
+        const categoryId = type !== 'debt_payment' ? targetId : undefined;
+        const debtId = type === 'debt_payment' ? targetId : undefined;
+
+        // Optimistic Update
         const newTx = {
             id: Math.random().toString(),
-            description: description || (type === 'income' ? 'Income' : 'Expense'),
+            description: description || (type === 'income' ? 'Income' : type === 'debt_payment' ? 'Debt Payment' : 'Expense'),
             amount,
             type,
             date: new Date().toISOString(),
-            category_name: data.categories.find(c => c.id === categoryId)?.name
+            category_name: type === 'debt_payment'
+                ? `To: ${data.debts.find(d => d.id === debtId)?.name}`
+                : data.categories.find(c => c.id === categoryId)?.name
         };
 
         const newData = { ...data };
         if (type === 'expense') {
             newData.safeToSpend -= amount;
             newData.spent += amount;
-        } else {
+        } else if (type === 'income') {
             newData.safeToSpend += amount;
+        } else if (type === 'debt_payment') {
+            newData.safeToSpend -= amount;
+            newData.spent += amount;
+            if (debtId) {
+                newData.debts = newData.debts.map(d => d.id === debtId ? { ...d, total_balance: Math.max(0, Number(d.total_balance) - amount) } : d);
+            }
         }
         newData.recentTransactions = [newTx, ...newData.recentTransactions];
 
         setData(newData);
 
         try {
-            await addTransaction(amount, description || "", type, categoryId);
+            await addTransaction(amount, description || "", type, categoryId, debtId);
         } catch (err) {
             console.error(err);
-            // Revert on error would go here
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleCloseMonth = async () => {
-        // Check if month has passed
         const now = new Date();
-        // Simple client check same as server
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
         if (!confirm("Are you sure? This should be done at the END of the month.")) return;
@@ -79,7 +87,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         try {
             const res = await closeMonth();
             if (res.success) {
-                alert("Month Closed!");
+                alert("Month Closed and Rolled Over!");
             } else {
                 alert("Error: " + res.error);
             }
@@ -98,7 +106,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <span className="text-xs font-mono text-stone-400">{new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
             </header>
 
-            {/* Hero Card: Safe To Spend */}
+            {/* Hero Card */}
             <section>
                 <PaperCard className="bg-stone-900 text-stone-50 border-stone-800 shadow-xl">
                     <div className="flex flex-col items-center justify-center p-6 py-8">
@@ -114,7 +122,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
             {/* Quick Add */}
             <section className="space-y-4">
-                <QuickAddForm categories={data.categories} onAdd={handleQuickAdd} isSubmitting={isSubmitting} />
+                <QuickAddForm
+                    categories={data.categories}
+                    debts={data.debts}
+                    onAdd={handleQuickAdd}
+                    isSubmitting={isSubmitting}
+                />
             </section>
 
             {/* Transactions List */}
@@ -127,7 +140,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </div>
 
                 <div className="relative">
-                    {/* Paper Lines Background for list */}
                     <div className="space-y-2">
                         {data.recentTransactions.length === 0 ? (
                             <p className="text-stone-300 text-sm p-4 text-center italic">No transactions yet.</p>
@@ -137,7 +149,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                                     <div>
                                         <div className="font-bold text-stone-800 text-sm">{tx.description}</div>
                                         <div className="text-[10px] text-stone-400 font-mono uppercase">
-                                            {new Date(tx.date).toLocaleDateString()} {tx.category_name ? `• ${tx.category_name}` : ''}
+                                            {new Date(tx.date).toLocaleDateString()}
+                                            {tx.type === 'debt_payment' && ' • Debt Pmt'}
+                                            {tx.category_name && tx.type !== 'debt_payment' ? ` • ${tx.category_name}` : ''}
                                         </div>
                                     </div>
                                     <div className={clsx("font-mono font-bold text-sm", tx.type === 'income' ? "text-green-600" : "text-stone-900")}>
@@ -181,10 +195,24 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     );
 }
 
-function QuickAddForm({ categories, onAdd, isSubmitting }: { categories: { id: string, name: string }[], onAdd: (type: 'expense' | 'income', amount: string, cat?: string, desc?: string) => void, isSubmitting: boolean }) {
+function QuickAddForm({ categories, debts, onAdd, isSubmitting }: {
+    categories: { id: string, name: string }[],
+    debts: { id: string, name: string }[],
+    onAdd: (type: TxType, amount: string, targetId?: string, desc?: string) => void,
+    isSubmitting: boolean
+}) {
     const [amount, setAmount] = useState("");
     const [description, setDescription] = useState("");
-    const [categoryId, setCategoryId] = useState("");
+    const [targetId, setTargetId] = useState("");
+    const [type, setType] = useState<TxType>('expense');
+
+    const handleSubmit = () => {
+        onAdd(type, amount, targetId, description);
+        setAmount("");
+        setDescription("");
+        setTargetId("");
+        setType('expense');
+    };
 
     return (
         <PaperCard className="p-4 space-y-3">
@@ -200,6 +228,22 @@ function QuickAddForm({ categories, onAdd, isSubmitting }: { categories: { id: s
                 />
             </div>
 
+            {/* Type Selection */}
+            <div className="flex gap-2 text-xs">
+                <button
+                    onClick={() => { setType('expense'); setTargetId(""); }}
+                    className={clsx("px-3 py-1 rounded-full border transition-colors", type === 'expense' ? "bg-stone-900 text-white border-stone-900" : "bg-white text-stone-500 border-stone-200 hover:bg-stone-50")}
+                >Expense</button>
+                <button
+                    onClick={() => { setType('income'); setTargetId(""); }}
+                    className={clsx("px-3 py-1 rounded-full border transition-colors", type === 'income' ? "bg-green-100 text-green-700 border-green-200 font-bold" : "bg-white text-stone-500 border-stone-200 hover:bg-stone-50")}
+                >Income</button>
+                <button
+                    onClick={() => { setType('debt_payment'); setTargetId(""); }}
+                    className={clsx("px-3 py-1 rounded-full border transition-colors", type === 'debt_payment' ? "bg-blue-100 text-blue-700 border-blue-200 font-bold" : "bg-white text-stone-500 border-stone-200 hover:bg-stone-50")}
+                >Pay Debt</button>
+            </div>
+
             {/* Details Row */}
             <div className="flex gap-2">
                 <input
@@ -207,35 +251,53 @@ function QuickAddForm({ categories, onAdd, isSubmitting }: { categories: { id: s
                     placeholder="Note (optional)"
                     value={description}
                     onChange={e => setDescription(e.target.value)}
-                    className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200"
+                    className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 transition-shadow focus:border-stone-300 border border-transparent"
                 />
 
-                <select
-                    value={categoryId}
-                    onChange={e => setCategoryId(e.target.value)}
-                    className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 text-stone-600 appearance-none bg-no-repeat bg-[right_0.5rem_center]"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
-                >
-                    <option value="">Category...</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                {/* Dynamic Dropdown based on Type */}
+                {type === 'expense' && (
+                    <select
+                        value={targetId}
+                        onChange={e => setTargetId(e.target.value)}
+                        className="flex-1 bg-stone-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-stone-200 text-stone-600 appearance-none bg-no-repeat bg-[right_0.5rem_center] cursor-pointer"
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
+                    >
+                        <option value="">Category...</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                )}
+
+                {type === 'debt_payment' && (
+                    <select
+                        value={targetId}
+                        onChange={e => setTargetId(e.target.value)}
+                        className="flex-1 bg-blue-50 rounded px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-200 text-blue-800 appearance-none font-bold cursor-pointer"
+                    >
+                        <option value="">Select Debt...</option>
+                        {debts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                )}
+
+                {type === 'income' && <div className="flex-1"></div>}
             </div>
 
-            {/* Actions */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
+            {/* Action Button */}
+            <div className="pt-2">
                 <button
                     disabled={isSubmitting}
-                    onClick={() => { onAdd('expense', amount, categoryId, description); setAmount(""); setDescription(""); setCategoryId(""); }}
-                    className="py-3 bg-stone-100 text-stone-600 rounded font-bold text-sm hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    onClick={handleSubmit}
+                    className={clsx(
+                        "w-full py-3 rounded font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2",
+                        type === 'expense' ? "bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-800" :
+                            type === 'income' ? "bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800" :
+                                "bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800"
+                    )}
                 >
-                    <Minus size={16} /> Expense
-                </button>
-                <button
-                    disabled={isSubmitting}
-                    onClick={() => { onAdd('income', amount, categoryId, description); setAmount(""); setDescription(""); setCategoryId(""); }}
-                    className="py-3 bg-stone-100 text-stone-600 rounded font-bold text-sm hover:bg-green-50 hover:text-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                    <Plus size={16} /> Income
+                    {type === 'expense' && <Minus size={16} />}
+                    {type === 'income' && <Plus size={16} />}
+                    {type === 'debt_payment' && <ArrowRight size={16} />}
+
+                    {type === 'expense' ? "Add Expense" : type === 'income' ? "Add Income" : "Record Payment"}
                 </button>
             </div>
         </PaperCard>
