@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Receipt, Plus } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Plus } from "lucide-react";
+import TransactionForm from "../components/TransactionForm";
 
 type Transaction = {
     id: string;
@@ -12,13 +13,15 @@ type Transaction = {
     date: string;
 };
 
-export default async function TransactionsPage() {
-    // In real app: const transactions = await getTransactions();
-    const transactions: Transaction[] = [
+export default function TransactionsPage() {
+    const [isFormOpen, setIsFormOpen] = useState(false);
+
+    // In real app: const transactions = useQuery... or passed as prop
+    const [transactions] = useState<Transaction[]>([
         { id: "1", amount: 120, type: "expense", description: "Grocery Run", date: "2026-01-08" },
         { id: "2", amount: 450, type: "income", description: "Freelance Work", date: "2026-01-07" },
         { id: "3", amount: 50, type: "expense", description: "Coffee", date: "2026-01-07" },
-    ];
+    ]);
 
     return (
         <main className="max-w-md mx-auto min-h-screen p-6 font-sans relative pb-20">
@@ -55,13 +58,22 @@ export default async function TransactionsPage() {
 
             {/* Floating Action Button / Add Form Trigger */}
             <div className="fixed bottom-6 right-6">
-                <button className="h-14 w-14 bg-stone-900 text-stone-50 rounded-full shadow-lg flex items-center justify-center hover:bg-stone-800 transition-transform active:scale-90 peer">
+                <button
+                    onClick={() => setIsFormOpen(true)}
+                    className="h-14 w-14 bg-stone-900 text-stone-50 rounded-full shadow-lg flex items-center justify-center hover:bg-stone-800 transition-transform active:scale-90 peer z-10"
+                >
                     <Plus size={24} />
                 </button>
             </div>
 
-            {/* Simple Inline Form (Mock for now, would be a Sheet/Modal) */}
-            {/* For this phase, I'll rely on the dashboard 'Quick Transaction' for verifying the write logic flow in next step */}
+            {/* Form Overlay */}
+            {isFormOpen && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4 animation-fade-in">
+                    <div className="w-full animate-slide-up">
+                        <TransactionForm onClose={() => setIsFormOpen(false)} />
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
