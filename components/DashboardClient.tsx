@@ -126,7 +126,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <div className="text-6xl font-mono font-bold tracking-tighter">
                             {currency(data.safeToSpend)}
                         </div>
-                        {data.spent > 0 && <div className="mt-4 text-red-500 text-xs font-mono bg-stone-800 px-3 py-1 rounded-full font-bold">Spent: {currency(data.spent)}</div>}
+                        {data.spent > 0 && <div className="mt-4 bg-stone-900 border border-red-900/50 text-red-500 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
                     </div>
                 </PaperCard>
             </section>
@@ -204,7 +204,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             {/* Persistent Mobile Add Bar */}
             <MobileAddBar
                 categories={data.categories}
-                debts={data.debts}
+                debts={data.debts.filter(d => d.total_balance > 0)}
                 onAdd={handleQuickAdd}
                 isSubmitting={isSubmitting}
             />
@@ -214,7 +214,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <EditTransactionSheet
                     transaction={editingTx}
                     categories={data.categories}
-                    debts={data.debts}
+                    debts={data.debts.filter(d => d.total_balance > 0)}
                     onClose={() => setEditingTx(null)}
                 />
             )}

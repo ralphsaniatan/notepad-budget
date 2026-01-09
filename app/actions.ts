@@ -95,7 +95,6 @@ export async function getDashboardData(): Promise<DashboardData> {
             .from('categories')
             .select('id, name')
             .eq('user_id', user.id)
-            .eq('is_commitment', false)
             .order('name');
 
         // Map transactions for UI
