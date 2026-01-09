@@ -190,14 +190,18 @@ export async function addTransaction(
         month = newMonth;
     }
 
+    // Validation
+    if (!amount || amount <= 0 || !isFinite(amount)) return { success: false, error: "Invalid amount" };
+    if (description.length > 100) return { success: false, error: "Description too long (max 100 chars)" };
+
     // 1. Insert Transaction
     const { error } = await supabase
         .from('transactions')
         .insert({
             user_id: user.id,
             month_id: month!.id,
-            amount,
-            description,
+            amount: Number(amount),
+            description: description.trim(),
             type,
             category_id: categoryId || null,
             debt_id: type === 'debt_payment' ? debtId : null
