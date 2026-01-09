@@ -124,7 +124,7 @@ export async function addTransaction(
     const now = new Date();
     const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // We need a month record to link transaction.
+    // We need a month record to link transaction. For MVP, ensure it exists or create.
     let { data: month } = await supabase.from('months').select('id').eq('user_id', user.id).eq('iso_month', isoMonth).single();
 
     if (!month) {
@@ -156,11 +156,6 @@ export async function addTransaction(
 
     // 2. If Debt Payment, Decrement Debt Balance
     if (type === 'debt_payment' && debtId) {
-        // We use an RPC or just raw update. Since we don't have an RPC for decrement, we fetch-update or assume concurrency isn't high for personal app.
-        // Better: Postgres `update debts set total_balance = total_balance - X`
-        // Supabase-js doesn't support relative updates easily without RPC, but we can do it via a quick RPC or just reading first.
-        // Let's read-then-write for MVP simplicity (postgres is fast enough for 1 user).
-
         const { data: debt } = await supabase.from('debts').select('total_balance').eq('id', debtId).single();
         if (debt) {
             const newBalance = Number(debt.total_balance) - amount;
@@ -170,6 +165,78 @@ export async function addTransaction(
 
     revalidatePath('/');
     return { success: true };
+}
+
+export async function closeMonth() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    try {
+        // 1. Get Current Month Data
+        const now = new Date();
+        const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+        const { data: month } = await supabase
+            .from('months')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('iso_month', isoMonth)
+            .single();
+
+        if (!month) return { success: false, error: "Current month not found" };
+
+        // Calculate Remaining
+        let income = month.income || 0;
+        const rollover = month.rollover || 0;
+
+        const { data: transactions } = await supabase
+            .from('transactions')
+            .select('amount, type, categories(is_commitment)')
+            .eq('month_id', month.id);
+
+        let spentVariable = 0;
+        transactions?.forEach((tx: any) => {
+            if (tx.type === 'income') income += Number(tx.amount);
+            else if (tx.type === 'expense' && !tx.categories?.is_commitment) spentVariable += Number(tx.amount);
+            else if (tx.type === 'debt_payment') spentVariable += Number(tx.amount);
+        });
+
+        const { data: committedCategories } = await supabase
+            .from('categories')
+            .select('budget_limit')
+            .eq('user_id', user.id)
+            .eq('is_commitment', true);
+
+        const totalCommitments = committedCategories?.reduce((sum, cat) => sum + Number(cat.budget_limit), 0) || 0;
+
+        const remaining = (income + rollover) - totalCommitments - spentVariable;
+
+        // 2. Close Current Month
+        await supabase.from('months').update({ status: 'closed' }).eq('id', month.id);
+
+        // 3. Create Next Month
+        let nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const nextIsoMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
+
+        const { error } = await supabase
+            .from('months')
+            .insert({
+                user_id: user.id,
+                iso_month: nextIsoMonth,
+                rollover: remaining,
+                status: 'active'
+            });
+
+        if (error) throw error;
+
+        revalidatePath('/');
+        return { success: true };
+
+    } catch (e: any) {
+        console.error("Close Month Error", e);
+        return { success: false, error: e.message };
+    }
 }
 
 export async function addDebt(name: string, balance: number, rate: number) {

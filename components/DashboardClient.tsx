@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
 import { DollarSign, ArrowRight, Wallet, AlertCircle, Plus, Minus, CreditCard, ChevronDown } from "lucide-react";
-import { addTransaction, addDebt } from "@/app/actions";
+import { addTransaction, addDebt, closeMonth } from "@/app/actions";
 
 type DashboardData = {
     income: number;
@@ -16,12 +16,10 @@ type DashboardData = {
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
     const [data, setData] = useState(initialData);
 
-    // Sync state if initialData updates
     useEffect(() => {
         setData(initialData);
     }, [initialData]);
 
-    // "Safe to Spend" Formula
     const safeToSpend = useMemo(() => {
         return (data.income + data.rollover) - data.commitments - data.spent;
     }, [data]);
@@ -29,7 +27,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 
-    // Quick Action State
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showAddDebt, setShowAddDebt] = useState(false);
 
@@ -41,7 +38,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         setIsSubmitting(true);
         const oldData = { ...data };
 
-        // Optimistic Update
         if (type === 'expense') {
             setData(prev => ({ ...prev, spent: prev.spent + amount }));
         } else {
@@ -79,7 +75,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         if (isNaN(amount) || amount <= 0) return;
 
         setIsSubmitting(true);
-        // Optimistic
+
         setData(prev => ({
             ...prev,
             spent: prev.spent + amount,
@@ -90,7 +86,20 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             await addTransaction(amount, "Debt Payment", "debt_payment", debtId);
         } catch (err) {
             console.error(err);
-            // Revert would be complex here, relying on revalidatePath usually covers it
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCloseMonth = async () => {
+        if (!confirm("Are you sure you want to close this month? \n\nRemaining 'Safe to Spend' will move to Next Month.")) return;
+
+        setIsSubmitting(true);
+        try {
+            await closeMonth();
+            alert("Month Closed! Rollover applied to Next Month.");
+        } catch (err) {
+            console.error(err);
         } finally {
             setIsSubmitting(false);
         }
@@ -98,7 +107,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
     return (
         <main className="min-h-screen p-4 md:p-8 max-w-2xl mx-auto space-y-8 pb-32">
-            {/* Header */}
             <header className="text-center space-y-2 mt-8">
                 <h1 className="text-4xl font-extrabold text-stone-900 tracking-tight">
                     Notepad Budget
@@ -106,7 +114,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <p className="text-stone-500 font-mono text-sm">January 2026</p>
             </header>
 
-            {/* Safe to Spend Hero */}
             <section className="relative">
                 <PaperCard className="bg-yellow-50/50 border-yellow-200">
                     <div className="flex flex-col items-center justify-center p-4">
@@ -123,7 +130,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </PaperCard>
             </section>
 
-            {/* Stats Grid */}
             <section className="grid grid-cols-2 gap-4">
                 <PaperCard title="Income">
                     <div className="text-2xl font-mono text-stone-700">{currency(data.income)}</div>
@@ -140,13 +146,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </PaperCard>
             </section>
 
-            {/* Quick Actions */}
             <section className="space-y-4">
                 <h3 className="text-stone-500 text-sm uppercase font-bold tracking-widest pl-1">Quick Add</h3>
                 <QuickAddForm onAdd={handleQuickAdd} isSubmitting={isSubmitting} />
             </section>
 
-            {/* Debts Section */}
             <section className="space-y-4">
                 <div className="flex justify-between items-end px-1">
                     <h3 className="text-stone-500 text-sm uppercase font-bold tracking-widest">Debts</h3>
@@ -180,14 +184,25 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                                     <div className="text-xl font-mono font-bold text-stone-800">{currency(debt.total_balance)}</div>
                                 </div>
                             </div>
-                            {/* Inline Pay Form */}
                             <PayDebtInline onPay={(amt) => handlePayDebt(debt.id, amt)} isSubmitting={isSubmitting} />
                         </PaperCard>
                     ))}
                 </div>
             </section>
 
-            {/* Debug Info */}
+            <section className="pt-8 border-t border-stone-200">
+                <button
+                    onClick={handleCloseMonth}
+                    disabled={isSubmitting}
+                    className="w-full py-4 border-2 border-stone-200 border-dashed text-stone-400 font-bold uppercase tracking-widest hover:border-stone-400 hover:text-stone-600 transition-colors disabled:opacity-50"
+                >
+                    Close Month & Rollover
+                </button>
+                <p className="text-center text-xs text-stone-300 mt-2">
+                    Moves your remaining Safe-to-Spend to next month's Rollover.
+                </p>
+            </section>
+
             <section className="opacity-30 text-xs font-mono text-center pt-8">
                 <p>Syncing with Supabase</p>
             </section>
