@@ -27,6 +27,12 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
     const [showFixedHelp, setShowFixedHelp] = useState(false);
     const [showVarFixedHelp, setShowVarFixedHelp] = useState(false);
 
+    // Close help when clicking outside
+    const closeHelp = () => {
+        setShowFixedHelp(false);
+        setShowVarFixedHelp(false);
+    };
+
     const handleAdd = async () => {
         if (!newName) return;
         setIsSubmitting(true);
@@ -43,7 +49,10 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
         setCategories(prev => [...prev, newCat]);
         setNewName("");
         setBudgetLimit("");
+        setNewName("");
+        setBudgetLimit("");
         setCommitmentType(null);
+        closeHelp();
 
         try {
             await addCategory(newName, commitmentType, limit);
@@ -56,6 +65,10 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
 
     return (
         <section className="space-y-6">
+            {/* Backdrop for Help Popups */}
+            {(showFixedHelp || showVarFixedHelp) && (
+                <div className="fixed inset-0 z-40 bg-transparent" onClick={closeHelp} />
+            )}
 
             {/* Add Form */}
             <PaperCard className="p-4 space-y-4 bg-stone-50 border-2 border-stone-200">
@@ -86,44 +99,44 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                         </label>
 
                         {/* Fixed */}
-                        <div className="relative">
+                        <div className="relative z-50">
                             <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                                 <input
                                     type="radio"
                                     name="catType"
                                     checked={commitmentType === 'fixed'}
-                                    onChange={() => setCommitmentType('fixed')}
+                                    onChange={() => { setCommitmentType('fixed'); closeHelp(); }}
                                     className="text-stone-900 focus:ring-stone-900"
                                 />
                                 <span className="text-sm font-bold text-stone-700">Fixed Expense</span>
-                                <button type="button" onClick={(e) => { e.preventDefault(); setShowFixedHelp(!showFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowFixedHelp(!showFixedHelp); setShowVarFixedHelp(false); }} className="p-1 text-stone-300 hover:text-stone-600 ml-auto">
                                     <Info size={14} />
                                 </button>
                             </label>
                             {showFixedHelp && (
-                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                <div className="absolute top-full right-0 mt-1 z-50 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
                                     <strong>Fixed Expense:</strong> A bill that is the same amount every month (e.g. Rent, Netflix).
                                 </div>
                             )}
                         </div>
 
                         {/* Variable Fixed */}
-                        <div className="relative">
+                        <div className="relative z-50">
                             <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                                 <input
                                     type="radio"
                                     name="catType"
                                     checked={commitmentType === 'variable_fixed'}
-                                    onChange={() => setCommitmentType('variable_fixed')}
+                                    onChange={() => { setCommitmentType('variable_fixed'); closeHelp(); }}
                                     className="text-stone-900 focus:ring-stone-900"
                                 />
                                 <span className="text-sm font-bold text-stone-700">Variable Fixed</span>
-                                <button type="button" onClick={(e) => { e.preventDefault(); setShowVarFixedHelp(!showVarFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowVarFixedHelp(!showVarFixedHelp); setShowFixedHelp(false); }} className="p-1 text-stone-300 hover:text-stone-600 ml-auto">
                                     <Info size={14} />
                                 </button>
                             </label>
                             {showVarFixedHelp && (
-                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                <div className="absolute top-full right-0 mt-1 z-50 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
                                     <strong>Variable Fixed:</strong> You want to set aside money for this (e.g. Petrol), but the actual spend varies month-to-month.
                                 </div>
                             )}
@@ -213,6 +226,12 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
     const [showFixedHelp, setShowFixedHelp] = useState(false);
     const [showVarFixedHelp, setShowVarFixedHelp] = useState(false);
 
+    // Close help when clicking outside
+    const closeHelp = () => {
+        setShowFixedHelp(false);
+        setShowVarFixedHelp(false);
+    };
+
     const handleSave = async () => {
         setIsSubmitting(true);
         const limit = parseFloat(budgetLimit) || 0;
@@ -236,7 +255,11 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            {/* Backdrop for Help Popups in Sheet */}
+            {(showFixedHelp || showVarFixedHelp) && (
+                <div className="fixed inset-0 z-[70] bg-transparent" onClick={closeHelp} />
+            )}
             <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center">
                     <h2 className="text-lg font-bold text-stone-900">Edit Category</h2>
@@ -268,44 +291,44 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                         </label>
 
                         {/* Fixed */}
-                        <div className="relative">
+                        <div className="relative z-50">
                             <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                                 <input
                                     type="radio"
                                     name="editCatType"
                                     checked={commitmentType === 'fixed'}
-                                    onChange={() => setCommitmentType('fixed')}
+                                    onChange={() => { setCommitmentType('fixed'); closeHelp(); }}
                                     className="text-stone-900 focus:ring-stone-900"
                                 />
                                 <span className="text-sm font-bold text-stone-700">Fixed Expense</span>
-                                <button type="button" onClick={(e) => { e.preventDefault(); setShowFixedHelp(!showFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowFixedHelp(!showFixedHelp); setShowVarFixedHelp(false); }} className="p-1 text-stone-300 hover:text-stone-600 ml-auto">
                                     <Info size={14} />
                                 </button>
                             </label>
                             {showFixedHelp && (
-                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                <div className="absolute top-full right-0 mt-1 z-50 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
                                     <strong>Fixed Expense:</strong> A bill that is the same amount every month (e.g. Rent, Netflix).
                                 </div>
                             )}
                         </div>
 
                         {/* Variable Fixed */}
-                        <div className="relative">
+                        <div className="relative z-50">
                             <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                                 <input
                                     type="radio"
                                     name="editCatType"
                                     checked={commitmentType === 'variable_fixed'}
-                                    onChange={() => setCommitmentType('variable_fixed')}
+                                    onChange={() => { setCommitmentType('variable_fixed'); closeHelp(); }}
                                     className="text-stone-900 focus:ring-stone-900"
                                 />
                                 <span className="text-sm font-bold text-stone-700">Variable Fixed</span>
-                                <button type="button" onClick={(e) => { e.preventDefault(); setShowVarFixedHelp(!showVarFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowVarFixedHelp(!showVarFixedHelp); setShowFixedHelp(false); }} className="p-1 text-stone-300 hover:text-stone-600 ml-auto">
                                     <Info size={14} />
                                 </button>
                             </label>
                             {showVarFixedHelp && (
-                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                <div className="absolute top-full right-0 mt-1 z-50 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
                                     <strong>Variable Fixed:</strong> You want to set aside money for this (e.g. Petrol), but the actual spend varies month-to-month.
                                 </div>
                             )}
