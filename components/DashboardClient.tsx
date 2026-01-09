@@ -17,6 +17,7 @@ type DashboardData = {
     categories: { id: string, name: string }[];
     breakdown?: { income: number, rollover: number, commitments: number, spent: number };
     userId?: string;
+    email?: string;
 };
 
 type TxType = 'expense' | 'income' | 'debt_payment';
@@ -321,7 +322,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
             {/* Debug Footer */}
             <footer className="text-center text-[10px] text-stone-300 font-mono py-8 select-all">
-                UID: {data.userId?.slice(-4) || '----'} | v1.18
+                {data.email} <br />
+                UID: {data.userId?.slice(-4) || '----'} | v1.19
             </footer>
         </main>
     );

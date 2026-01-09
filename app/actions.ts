@@ -12,6 +12,7 @@ type DashboardData = {
     categories: { id: string, name: string }[];
     breakdown?: { income: number, rollover: number, commitments: number, spent: number };
     userId?: string;
+    email?: string;
 };
 
 // Fallback for initial state or error
@@ -143,7 +144,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
                 commitments: totalCommitments,
                 spent: spentVariable
             },
-            userId: user.id
+            userId: user.id,
+            email: user.email
         };
 
     } catch (error) {
