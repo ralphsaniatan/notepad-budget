@@ -9,7 +9,7 @@ type DashboardData = {
     rollover: number;
     commitments: number;
     spent: number;
-    debt: number;
+    debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
 };
 
 // Fallback for initial state or error
@@ -18,7 +18,7 @@ const DEFAULT_DASHBOARD: DashboardData = {
     rollover: 0,
     commitments: 0,
     spent: 0,
-    debt: 0
+    debts: []
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -40,19 +40,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             .eq('iso_month', isoMonth)
             .single();
 
-        // If month doesn't exist, we might return zeros. 
-        // In a real flow, we'd auto-create it, but let's just ready the data if it exists.
-
         // 2. Aggregate Transactions for this month
-        // We need to sum:
-        // - 'income' -> dashboard.income (plus base income from month table if we had that, but here we just sum transactions + separate month.income field?)
-        // Let's assume for this MVP:
-        // - Income = Sum of transactions type='income' + month.income (if any)
-        // - Spent = Sum of transactions type='expense' where category.is_commitment = false
-        // - Commitments = Sum of categories.budget_limit where is_commitment = true 
-        //   (This is "Planned Commitments", prompt said "Unpaid Commitments" for Safe-to-Spend. 
-        //    Let's stick to simple: Commitments = Total Fixed Costs Budgeted)
-
         let income = month?.income || 0;
         const rollover = month?.rollover || 0;
 
@@ -75,16 +63,18 @@ export async function getDashboardData(): Promise<DashboardData> {
             if (tx.type === 'income') {
                 income += Number(tx.amount);
             } else if (tx.type === 'expense') {
-                // If it's a committed category (bill), we don't count it as "Variable Spent" 
-                // because we subtract the WHOLE commitment budget from Safe-to-Spend anyway.
-                // Wait, if I pay a bill, does it reduce my cash? Yes.
-                // Safe-to-Spend formula: (Income + Rollover) - (Total Commitments) - (Variable Spent).
-                // If I pay a bill, it shouldn't change Safe-to-Spend (money was already "gone").
-                // So "Variable Spent" should ONLY be expenses where is_commitment is FALSE (or null).
                 const isCommitment = tx.categories?.is_commitment;
                 if (!isCommitment) {
                     spentVariable += Number(tx.amount);
                 }
+            }
+            // Note: Debt payments are NOT "Variable Spent" (they are transfers to debt), 
+            // nor "Income". They reduce cash, but we track them separately if needed.
+            // For Safe-to-Spend: (Income+Rollover) - Commitments - (Variable Spent) - (Debt Payments)?
+            // Usually, allocated money for debt is separate. 
+            // Let's assume for MVP: Debt Payments reduce Safe-to-Spend immediately (like an expense).
+            else if (tx.type === 'debt_payment') {
+                spentVariable += Number(tx.amount);
             }
         });
 
@@ -97,12 +87,19 @@ export async function getDashboardData(): Promise<DashboardData> {
 
         const totalCommitments = committedCategories?.reduce((sum, cat) => sum + Number(cat.budget_limit), 0) || 0;
 
+        // 4. Get Debts
+        const { data: debts } = await supabase
+            .from('debts')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('total_balance', { ascending: false });
+
         return {
             income,
             rollover,
             commitments: totalCommitments,
             spent: spentVariable,
-            debt: 0 // TODO: Implement debt sum
+            debts: debts || []
         };
 
     } catch (error) {
@@ -111,7 +108,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     }
 }
 
-export async function addTransaction(amount: number, description: string, type: 'expense' | 'income' | 'debt_payment') {
+export async function addTransaction(
+    amount: number,
+    description: string,
+    type: 'expense' | 'income' | 'debt_payment',
+    debtId?: string
+) {
     const supabase = await createClient();
 
     // Get current user
@@ -122,31 +124,29 @@ export async function addTransaction(amount: number, description: string, type: 
     const now = new Date();
     const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // We need a month record to link transaction. For MVP, ensure it exists or create.
+    // We need a month record to link transaction.
     let { data: month } = await supabase.from('months').select('id').eq('user_id', user.id).eq('iso_month', isoMonth).single();
 
     if (!month) {
-        const { data: newMonth, error: createError } = await supabase
+        // Auto-create month if missing
+        const { data: newMonth } = await supabase
             .from('months')
             .insert({ user_id: user.id, iso_month: isoMonth })
             .select()
             .single();
-
-        if (createError || !newMonth) {
-            console.error("Failed to create month:", createError);
-            return { success: false, error: "Could not initialize month" };
-        }
         month = newMonth;
     }
 
+    // 1. Insert Transaction
     const { error } = await supabase
         .from('transactions')
         .insert({
             user_id: user.id,
-            month_id: month!.id,
+            month_id: month!.id, // Non-null asserted
             amount,
             description,
-            type
+            type,
+            debt_id: type === 'debt_payment' ? debtId : null
         });
 
     if (error) {
@@ -154,6 +154,39 @@ export async function addTransaction(amount: number, description: string, type: 
         return { success: false, error: error.message };
     }
 
+    // 2. If Debt Payment, Decrement Debt Balance
+    if (type === 'debt_payment' && debtId) {
+        // We use an RPC or just raw update. Since we don't have an RPC for decrement, we fetch-update or assume concurrency isn't high for personal app.
+        // Better: Postgres `update debts set total_balance = total_balance - X`
+        // Supabase-js doesn't support relative updates easily without RPC, but we can do it via a quick RPC or just reading first.
+        // Let's read-then-write for MVP simplicity (postgres is fast enough for 1 user).
+
+        const { data: debt } = await supabase.from('debts').select('total_balance').eq('id', debtId).single();
+        if (debt) {
+            const newBalance = Number(debt.total_balance) - amount;
+            await supabase.from('debts').update({ total_balance: newBalance }).eq('id', debtId);
+        }
+    }
+
     revalidatePath('/');
     return { success: true };
+}
+
+export async function addDebt(name: string, balance: number, rate: number) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false };
+
+    const { error } = await supabase
+        .from('debts')
+        .insert({
+            user_id: user.id,
+            name,
+            total_balance: balance,
+            interest_rate: rate
+        });
+
+    if (error) console.error(error);
+    revalidatePath('/');
+    return { success: !error };
 }

@@ -17,8 +17,8 @@ This guide will help you configure the external services required for the Notepa
     *   Add the following variables:
 
     ```bash
-    NEXT_PUBLIC_SUPABASE_URL=your_project_url_here
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+    NEXT_PUBLIC_SUPABASE_URL=https://phrsgtxmsytujyjsuwte.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_wYfHqMW4lv8V2tjs6Vvazg_9JguqMbC
     ```
 
 ## 2. GitHub (Version Control)
