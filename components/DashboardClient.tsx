@@ -6,12 +6,13 @@ import { addTransaction, closeMonth } from "@/app/actions";
 import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
+import { EditTransactionSheet } from "@/components/EditTransactionSheet";
 
 type DashboardData = {
     safeToSpend: number;
     spent: number;
     debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
-    recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string }[];
+    recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string, category_id?: string, debt_id?: string }[];
     categories: { id: string, name: string }[];
 };
 
@@ -20,17 +21,11 @@ type TxType = 'expense' | 'income' | 'debt_payment';
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
     const [data, setData] = useState(initialData);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingTx, setEditingTx] = useState<any>(null); // State for editing
 
-    // Date Logic for UI
+    // Date Logic
     const now = new Date();
     const currentMonthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const isEndOfMonth = now.getDate() === new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    // Simplistic Logic: Show close button only if today is arguably "after" the budget month, or strictly near end.
-    // For this app, let's say we only show it if the user visits in a new month but the "Old" month is still active (which isn't tracked here client side easily without props),
-    // OR simply allow it only on the last few days? 
-    // User asked: "only if its the end of the month or weve passed the month".
-    // Let's check against daysInMonth.
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const canClose = now.getDate() >= daysInMonth;
 
@@ -54,14 +49,16 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
         // Optimistic Update
         const newTx = {
-            id: Math.random().toString(),
+            id: Math.random().toString(), // Temp ID
             description: description || (type === 'income' ? 'Income' : type === 'debt_payment' ? 'Debt Payment' : 'Expense'),
             amount,
             type,
             date: new Date().toISOString(),
             category_name: type === 'debt_payment'
                 ? `To: ${data.debts.find(d => d.id === debtId)?.name}`
-                : data.categories.find(c => c.id === categoryId)?.name
+                : data.categories.find(c => c.id === categoryId)?.name,
+            category_id: categoryId,
+            debt_id: debtId
         };
 
         const newData = { ...data };
@@ -98,7 +95,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             const res = await closeMonth();
             if (res.success) {
                 alert("Month Closed Successfully!");
-                window.location.reload(); // Force full reload to get new month data
+                window.location.reload();
             } else {
                 alert("Error: " + res.error);
             }
@@ -129,7 +126,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <div className="text-6xl font-mono font-bold tracking-tighter">
                             {currency(data.safeToSpend)}
                         </div>
-                        {data.spent > 0 && <div className="mt-4 text-stone-500 text-xs font-mono bg-stone-800 px-3 py-1 rounded-full">Spent: {currency(data.spent)}</div>}
+                        {data.spent > 0 && <div className="mt-4 text-red-500 text-xs font-mono bg-stone-800 px-3 py-1 rounded-full font-bold">Spent: {currency(data.spent)}</div>}
                     </div>
                 </PaperCard>
             </section>
@@ -151,7 +148,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                             </p>
                         ) : (
                             data.recentTransactions.map(tx => (
-                                <div key={tx.id} className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg">
+                                <div
+                                    key={tx.id}
+                                    onClick={() => setEditingTx(tx)}
+                                    className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
+                                >
                                     <div>
                                         <div className="font-bold text-stone-800 text-sm">{tx.description}</div>
                                         <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
@@ -207,6 +208,16 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 onAdd={handleQuickAdd}
                 isSubmitting={isSubmitting}
             />
+
+            {/* Edit Sheet */}
+            {editingTx && (
+                <EditTransactionSheet
+                    transaction={editingTx}
+                    categories={data.categories}
+                    debts={data.debts}
+                    onClose={() => setEditingTx(null)}
+                />
+            )}
         </main>
     );
 }

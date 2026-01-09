@@ -1,9 +1,9 @@
-import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
-
 export default function Loading() {
     return (
-        <main className="min-h-screen p-4 md:p-6 max-w-lg mx-auto pb-40">
-            <LoadingSkeleton />
+        <main className="min-h-screen flex items-center justify-center bg-stone-100">
+            <div className="animate-pulse flex flex-col items-center gap-2">
+                <span className="text-stone-400 font-mono text-xs uppercase tracking-widest">Opening Ledger...</span>
+            </div>
         </main>
     );
 }

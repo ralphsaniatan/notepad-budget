@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
 import { ArrowRight, Plus } from "lucide-react";
 import { addDebt, addTransaction } from "@/app/actions";
+import clsx from "clsx";
 
 type Debt = {
     id: string;
@@ -91,7 +92,7 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
                     <PaperCard key={debt.id} className="relative group">
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <h4 className="font-bold text-stone-900 text-lg">{debt.name}</h4>
+                                <h4 className={clsx("font-bold text-stone-900 text-lg", debt.total_balance <= 0 && "line-through decoration-red-600 decoration-4 -rotate-2 opacity-60")}>{debt.name}</h4>
                                 <p className="text-xs text-stone-400 font-mono mt-1">{debt.interest_rate}% APR</p>
                             </div>
                             <div className="text-right">

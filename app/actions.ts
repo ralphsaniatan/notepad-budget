@@ -105,7 +105,9 @@ export async function getDashboardData(): Promise<DashboardData> {
             amount: tx.amount,
             type: tx.type,
             date: tx.date || new Date().toISOString(),
-            category_name: tx.categories?.name
+            category_name: tx.categories?.name,
+            category_id: tx.category_id,
+            debt_id: tx.debt_id
         }));
 
         return {
@@ -291,6 +293,59 @@ export async function addCategory(name: string, is_commitment: boolean, budget_l
 
     if (error) {
         console.error("Add Category Error:", error);
+        return { success: false, error: error.message };
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+}
+
+export async function updateTransaction(
+    id: string,
+    amount: number,
+    description: string,
+    type: 'expense' | 'income' | 'debt_payment',
+    categoryId?: string,
+    debtId?: string
+) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('transactions')
+        .update({
+            amount,
+            description,
+            type,
+            category_id: categoryId || null,
+            debt_id: type === 'debt_payment' ? debtId : null
+        })
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) {
+        console.error("Update Transaction Error:", error);
+        return { success: false, error: error.message };
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+}
+
+export async function deleteTransaction(id: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) {
+        console.error("Delete Transaction Error:", error);
         return { success: false, error: error.message };
     }
 
