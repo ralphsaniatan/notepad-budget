@@ -1,12 +1,12 @@
 "use client";
 
-import { DotLottiePlayer } from '@dotlottie/react-player';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 export default function Loading() {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
             <div className="relative w-[300px] h-[300px]">
-                <DotLottiePlayer
+                <DotLottieReact
                     src="https://lottie.host/d8d7a317-458c-4060-9f16-f6fe945783fa/SIv2ZZXtTr.lottie"
                     loop
                     autoplay
