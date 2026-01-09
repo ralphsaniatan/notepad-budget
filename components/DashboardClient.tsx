@@ -27,17 +27,42 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     const [showBreakdown, setShowBreakdown] = useState(false);
 
     // Date Logic
-    const now = new Date();
-    const currentMonthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const canClose = now.getDate() >= daysInMonth;
+    // Use the date from the first transaction or today if empty vs URL param... 
+    // Actually simpler: we can infer the "Viewed Month" from the passed-in props? 
+    // But for now let's just use url param or today.
+    // Ideally passed from server, but we can reconstruct from query params if we had them.
+    // Let's rely on a client-side parsed date for the header display.
+    const [currentDate, setCurrentDate] = useState(new Date());
 
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const m = params.get('month');
+        if (m) setCurrentDate(new Date(m));
+        else setCurrentDate(new Date());
+
         setData(initialData);
     }, [initialData]);
 
+    const changeMonth = (offset: number) => {
+        const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
+        const isoParams = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}-01`;
+        window.location.href = `/?month=${isoParams}`; // Standard nav to refresh server data
+    };
+
+    const currentMonthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const isFuture = false; // logic placeholder
+
+    // Check if we are viewing the *real* current month to allow closing
+    const realNow = new Date();
+    const isCurrentRealMonth = realNow.getMonth() === currentDate.getMonth() && realNow.getFullYear() === currentDate.getFullYear();
+
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+    // Only allow closing if it's the *Current Real Month* and it's over, OR if we are looking at a past active month? 
+    // Actually "Close Month" button should probably only appear if we are on the current active month.
+    const canClose = isCurrentRealMonth && realNow.getDate() >= daysInMonth;
+
     const currency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
 
     const handleQuickAdd = async (type: TxType, amountStr: string, targetId?: string, description?: string) => {
         if (!amountStr) return;
@@ -117,9 +142,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             {/* App Header */}
             <header className="flex justify-between items-center mt-4">
                 <h1 className="font-bold text-stone-900 tracking-tight text-xl">Notepad Budget</h1>
-                <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
-                    {currentMonthName}
-                </span>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&larr;</button>
+                    <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
+                        {currentMonthName}
+                    </span>
+                    <button onClick={() => changeMonth(1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&rarr;</button>
+                </div>
             </header>
 
             {/* Hero Card */}

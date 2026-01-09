@@ -19,7 +19,7 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
     const [showAddForm, setShowAddForm] = useState(false);
 
     const currency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
 
     const handleAddDebt = async (name: string, balanceStr: string, rateStr: string) => {
         const balance = parseFloat(balanceStr);

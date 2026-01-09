@@ -22,15 +22,18 @@ const DEFAULT_DASHBOARD: DashboardData = {
     categories: []
 };
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(targetDate?: string): Promise<DashboardData> {
     const supabase = await createClient();
 
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return DEFAULT_DASHBOARD;
 
-        // 1. Get Current Month
-        const now = new Date();
+        // 1. Get Current Month (or Target)
+        const now = targetDate ? new Date(targetDate) : new Date();
+        // Ensure valid date
+        if (isNaN(now.getTime())) throw new Error("Invalid Date");
+
         const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
         // Fetch or Create Month
