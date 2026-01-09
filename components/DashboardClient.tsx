@@ -363,6 +363,21 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     </section>
                 )}
 
+                {/* Debug Footer */}
+                <footer className="text-center py-8 space-y-4">
+                    <button
+                        onClick={() => signOut()}
+                        className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors"
+                    >
+                        <LogOut size={14} /> Log Out
+                    </button>
+
+                    <div className="text-[10px] text-stone-300 font-mono select-all">
+                        {data.email} <br />
+                        UID: {data.userId?.slice(-4) || '----'} | v1.22.3
+                    </div>
+                </footer>
+
             </main>
 
             {/* Persistent Mobile Add Bar */}
