@@ -16,10 +16,13 @@ This guide will help you configure the external services required for the Notepa
     *   In the root of the project, rename `.env.local.example` to `.env.local` (or create it if it doesn't exist).
     *   Add the following variables:
 
-    ```bash
-    NEXT_PUBLIC_SUPABASE_URL=https://phrsgtxmsytujyjsuwte.supabase.co
     NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_wYfHqMW4lv8V2tjs6Vvazg_9JguqMbC
     ```
+
+4.  **Configure Authentication (Important):**
+    *   Go to **Authentication** -> **Providers** -> **Email**.
+    *   **Disable** "Confirm email". (This is required for "Guest Mode" and immediate family signups).
+    *   Click **Save**.
 
 ## 2. GitHub (Version Control)
 
