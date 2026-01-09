@@ -5,20 +5,20 @@ import { revalidatePath } from "next/cache";
 
 // Type definitions matching our schema
 type DashboardData = {
-    income: number;
-    rollover: number;
-    commitments: number;
+    safeToSpend: number;
     spent: number;
     debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
+    recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string }[];
+    categories: { id: string, name: string }[];
 };
 
 // Fallback for initial state or error
 const DEFAULT_DASHBOARD: DashboardData = {
-    income: 0,
-    rollover: 0,
-    commitments: 0,
+    safeToSpend: 0,
     spent: 0,
-    debts: []
+    debts: [],
+    recentTransactions: [],
+    categories: []
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -40,26 +40,27 @@ export async function getDashboardData(): Promise<DashboardData> {
             .eq('iso_month', isoMonth)
             .single();
 
-        // 2. Aggregate Transactions for this month
+        // 2. Data Aggregation
         let income = month?.income || 0;
         const rollover = month?.rollover || 0;
 
-        // Get Transactions
-        const { data: transactions } = await supabase
+        // Get recent transactions for the list
+        // Note: 'categories' is the table name, 'name' is the column
+        const { data: allTransactions } = await supabase
             .from('transactions')
             .select(`
-                amount,
-                type,
-                categories (
-                    is_commitment
-                )
+                *,
+                categories ( name, is_commitment )
             `)
             .eq('user_id', user.id)
-            .gte('date', isoMonth); // Simple date filter for now
+            .gte('date', isoMonth) // Only current month transactions for calculations
+            .order('date', { ascending: false });
+
+        const transactions = allTransactions || [];
 
         let spentVariable = 0;
 
-        transactions?.forEach((tx: any) => {
+        transactions.forEach((tx: any) => {
             if (tx.type === 'income') {
                 income += Number(tx.amount);
             } else if (tx.type === 'expense') {
@@ -68,17 +69,12 @@ export async function getDashboardData(): Promise<DashboardData> {
                     spentVariable += Number(tx.amount);
                 }
             }
-            // Note: Debt payments are NOT "Variable Spent" (they are transfers to debt), 
-            // nor "Income". They reduce cash, but we track them separately if needed.
-            // For Safe-to-Spend: (Income+Rollover) - Commitments - (Variable Spent) - (Debt Payments)?
-            // Usually, allocated money for debt is separate. 
-            // Let's assume for MVP: Debt Payments reduce Safe-to-Spend immediately (like an expense).
             else if (tx.type === 'debt_payment') {
                 spentVariable += Number(tx.amount);
             }
         });
 
-        // 3. Get Commitments (Total Budgeted for Fixed Bills)
+        // 3. Get Commitments
         const { data: committedCategories } = await supabase
             .from('categories')
             .select('budget_limit')
@@ -86,6 +82,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             .eq('is_commitment', true);
 
         const totalCommitments = committedCategories?.reduce((sum, cat) => sum + Number(cat.budget_limit), 0) || 0;
+        const safeToSpend = (income + rollover) - totalCommitments - spentVariable;
 
         // 4. Get Debts
         const { data: debts } = await supabase
@@ -94,12 +91,30 @@ export async function getDashboardData(): Promise<DashboardData> {
             .eq('user_id', user.id)
             .order('total_balance', { ascending: false });
 
+        // 5. Get Categories for Dropdown (non-commitment)
+        const { data: categories } = await supabase
+            .from('categories')
+            .select('id, name')
+            .eq('user_id', user.id)
+            .eq('is_commitment', false)
+            .order('name');
+
+        // Map transactions for UI
+        const recentTransactions = transactions.slice(0, 20).map((tx: any) => ({
+            id: tx.id,
+            description: tx.description || (tx.categories?.name) || 'Untitled',
+            amount: tx.amount,
+            type: tx.type,
+            date: tx.date || new Date().toISOString(),
+            category_name: tx.categories?.name
+        }));
+
         return {
-            income,
-            rollover,
-            commitments: totalCommitments,
+            safeToSpend,
             spent: spentVariable,
-            debts: debts || []
+            debts: debts || [],
+            recentTransactions,
+            categories: categories || []
         };
 
     } catch (error) {
@@ -112,6 +127,7 @@ export async function addTransaction(
     amount: number,
     description: string,
     type: 'expense' | 'income' | 'debt_payment',
+    categoryId?: string,
     debtId?: string
 ) {
     const supabase = await createClient();
@@ -124,11 +140,10 @@ export async function addTransaction(
     const now = new Date();
     const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // We need a month record to link transaction. For MVP, ensure it exists or create.
+    // We need a month record.
     let { data: month } = await supabase.from('months').select('id').eq('user_id', user.id).eq('iso_month', isoMonth).single();
 
     if (!month) {
-        // Auto-create month if missing
         const { data: newMonth } = await supabase
             .from('months')
             .insert({ user_id: user.id, iso_month: isoMonth })
@@ -142,10 +157,11 @@ export async function addTransaction(
         .from('transactions')
         .insert({
             user_id: user.id,
-            month_id: month!.id, // Non-null asserted
+            month_id: month!.id,
             amount,
             description,
             type,
+            category_id: categoryId || null,
             debt_id: type === 'debt_payment' ? debtId : null
         });
 
@@ -173,7 +189,6 @@ export async function closeMonth() {
     if (!user) return { success: false, error: "Not authenticated" };
 
     try {
-        // 1. Get Current Month Data
         const now = new Date();
         const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
@@ -186,7 +201,20 @@ export async function closeMonth() {
 
         if (!month) return { success: false, error: "Current month not found" };
 
-        // Calculate Remaining
+        // Strict Check: Cannot close current month until next month starts
+        // We check if "now" is still within the month. 
+        // Logic: if now.getMonth() == month(isoMonth).getMonth(), then reject.
+        // Actually, let's just parse isoMonth.
+        const [y, m] = isoMonth.split('-');
+        if (now.getMonth() + 1 === parseInt(m) && now.getFullYear() === parseInt(y)) {
+            // We are IN the active month.
+            // However, for testing purposes or "early close", some users might want it.
+            // User explicitly requested: "close and roll over only after the month has passed"
+            // So we throw error.
+            return { success: false, error: "Cannot close month until it has ended." };
+        }
+
+        // Calculate Remaining Logic (Same as before)
         let income = month.income || 0;
         const rollover = month.rollover || 0;
 
@@ -209,13 +237,10 @@ export async function closeMonth() {
             .eq('is_commitment', true);
 
         const totalCommitments = committedCategories?.reduce((sum, cat) => sum + Number(cat.budget_limit), 0) || 0;
-
         const remaining = (income + rollover) - totalCommitments - spentVariable;
 
-        // 2. Close Current Month
         await supabase.from('months').update({ status: 'closed' }).eq('id', month.id);
 
-        // 3. Create Next Month
         let nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const nextIsoMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
 
