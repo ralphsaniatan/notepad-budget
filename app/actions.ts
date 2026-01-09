@@ -10,6 +10,7 @@ type DashboardData = {
     debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
     recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string }[];
     categories: { id: string, name: string }[];
+    breakdown?: { income: number, rollover: number, commitments: number, spent: number };
 };
 
 // Fallback for initial state or error
@@ -99,7 +100,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             .order('name');
 
         // Map transactions for UI
-        const recentTransactions = transactions.slice(0, 20).map((tx: any) => {
+        const recentTransactions = transactions.map((tx: any) => {
             // Logic: If Debt Payment, prefer Debt Name. Else Description. Else Category Name.
             // Note: If user entered a specific description, use it. If it matches the default "Debt Payment", try to be smarter.
             // But user asked for: "it should be described as "Loan" rather than untitled"
@@ -130,7 +131,13 @@ export async function getDashboardData(): Promise<DashboardData> {
             spent: spentVariable,
             debts: debts || [],
             recentTransactions,
-            categories: categories || []
+            categories: categories || [],
+            breakdown: {
+                income,
+                rollover,
+                commitments: totalCommitments,
+                spent: spentVariable
+            }
         };
 
     } catch (error) {

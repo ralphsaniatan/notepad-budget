@@ -7,6 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
+import { Info, X } from "lucide-react";
 
 type DashboardData = {
     safeToSpend: number;
@@ -14,6 +15,7 @@ type DashboardData = {
     debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
     recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string, category_id?: string, debt_id?: string }[];
     categories: { id: string, name: string }[];
+    breakdown?: { income: number, rollover: number, commitments: number, spent: number };
 };
 
 type TxType = 'expense' | 'income' | 'debt_payment';
@@ -21,7 +23,8 @@ type TxType = 'expense' | 'income' | 'debt_payment';
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
     const [data, setData] = useState(initialData);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [editingTx, setEditingTx] = useState<any>(null); // State for editing
+    const [editingTx, setEditingTx] = useState<any>(null);
+    const [showBreakdown, setShowBreakdown] = useState(false);
 
     // Date Logic
     const now = new Date();
@@ -65,11 +68,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         if (type === 'expense') {
             newData.safeToSpend -= amount;
             newData.spent += amount;
+            if (newData.breakdown) newData.breakdown.spent += amount;
         } else if (type === 'income') {
             newData.safeToSpend += amount;
+            if (newData.breakdown) newData.breakdown.income += amount;
         } else if (type === 'debt_payment') {
             newData.safeToSpend -= amount;
             newData.spent += amount;
+            if (newData.breakdown) newData.breakdown.spent += amount;
             if (debtId) {
                 newData.debts = newData.debts.map(d => d.id === debtId ? { ...d, total_balance: Math.max(0, Number(d.total_balance) - amount) } : d);
             }
@@ -118,12 +124,20 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
             {/* Hero Card */}
             <section>
-                <PaperCard className="bg-stone-900 text-stone-50 border-stone-800 shadow-xl transition-transform hover:scale-[1.01]">
+                <PaperCard className="bg-stone-900 text-stone-50 border-stone-800 shadow-xl transition-transform hover:scale-[1.01] relative">
+                    {/* Info Icon */}
+                    <button
+                        onClick={() => setShowBreakdown(true)}
+                        className="absolute top-4 right-4 text-stone-500 hover:text-stone-300 transition-colors"
+                    >
+                        <Info size={20} />
+                    </button>
+
                     <div className="flex flex-col items-center justify-center p-6 py-10">
                         <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
                             Safe to Spend
                         </span>
-                        <div className="text-6xl font-mono font-bold tracking-tighter">
+                        <div className={clsx("text-6xl font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-500" : "text-white")}>
                             {currency(data.safeToSpend)}
                         </div>
                         {data.spent > 0 && <div className="mt-4 bg-red-600 border border-red-700 text-white text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
@@ -217,6 +231,52 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     debts={data.debts.filter(d => d.total_balance > 0)}
                     onClose={() => setEditingTx(null)}
                 />
+            )}
+
+            {/* Breakdown Sheet */}
+            {showBreakdown && data.breakdown && (
+                <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-lg font-bold text-stone-900">Calculated Budget</h2>
+                            <button onClick={() => setShowBreakdown(false)} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2">
+                                <span className="text-stone-500">Monthly Income</span>
+                                <span className="font-mono font-bold text-green-600">+{currency(data.breakdown.income)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2">
+                                <span className="text-stone-500">Rollover from Prev. Month</span>
+                                <span className={clsx("font-mono font-bold", data.breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
+                                    {data.breakdown.rollover >= 0 ? '+' : ''}{currency(data.breakdown.rollover)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2">
+                                <span className="text-stone-500">Fixed Bills (Commitments)</span>
+                                <span className="font-mono font-bold text-stone-800">-{currency(data.breakdown.commitments)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm border-b border-stone-100 pb-2 mb-4">
+                                <span className="text-stone-500">Variable Spent</span>
+                                <span className="font-mono font-bold text-red-600">-{currency(data.breakdown.spent)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2 border-t-2 border-stone-900">
+                                <span className="font-bold text-stone-900 text-lg">Safe to Spend</span>
+                                <span className={clsx("font-mono font-bold text-xl", data.safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
+                                    {currency(data.safeToSpend)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <p className="text-[10px] text-stone-400 text-center px-8">
+                            This is your "Safe to Spend" amount after setting aside money for fixed bills and accounting for what you've already spent.
+                        </p>
+                    </div>
+                </div>
             )}
         </main>
     );
