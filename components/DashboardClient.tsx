@@ -224,10 +224,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             <section className="pt-4 border-t border-stone-200 border-dashed grid grid-cols-2 gap-4">
                 <Link href="/savings">
                     <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full">
-                        <div className="p-4 flex flex-col justify-between h-full">
-                            <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest mb-1">Savings</h3>
+                        <div className="p-3 flex flex-col justify-between h-full min-h-[100px]">
+                            <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Future Expenses</h3>
                             <div className="text-lg font-bold text-stone-800 flex items-center gap-1">
-                                Goals &rarr;
+                                Planning &rarr;
                             </div>
                         </div>
                     </PaperCard>
@@ -235,12 +235,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
                 <Link href="/debts">
                     <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full">
-                        <div className="p-4 flex flex-col justify-between h-full">
+                        <div className="p-3 flex flex-col justify-between h-full min-h-[100px]">
                             <div>
-                                <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest mb-1">Total Debt</h3>
+                                <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total Debt</h3>
                             </div>
-                            <div className="text-lg font-mono font-bold text-stone-800">
-                                {currency(data.debts.reduce((acc, d) => acc + Number(d.total_balance), 0))}
+                            <div className="text-lg font-mono font-bold text-stone-800 break-all leading-tight">
+                                <span className="text-xs mr-1 opacity-60">AED</span>
+                                {data.debts.reduce((acc, d) => acc + Number(d.total_balance), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                     </PaperCard>

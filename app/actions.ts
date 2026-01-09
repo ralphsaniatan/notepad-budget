@@ -480,6 +480,42 @@ export async function contributeToSavings(goalId: string, amount: number, goalNa
     return { success: true };
 }
 
+export async function updateSavingsGoal(id: string, name: string, targetAmount: number, targetDate: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('savings_goals')
+        .update({
+            name,
+            target_amount: targetAmount,
+            target_date: targetDate
+        })
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/savings');
+    return { success: true };
+}
+
+export async function deleteSavingsGoal(id: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('savings_goals')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/savings');
+    return { success: true };
+}
+
 // --- Category Management ---
 
 export async function updateCategory(id: string, name: string, is_commitment: boolean, budget_limit: number) {
