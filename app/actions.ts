@@ -58,7 +58,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             `)
             .eq('user_id', user.id)
             .gte('date', isoMonth) // Only current month transactions for calculations
-            .order('date', { ascending: false });
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false });
 
         const transactions = allTransactions || [];
 
