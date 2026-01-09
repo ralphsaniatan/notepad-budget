@@ -166,8 +166,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
                             Safe to Spend
                         </span>
-                        <div className={clsx("text-6xl font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-500" : "text-white")}>
-                            {currency(data.safeToSpend)}
+                        <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-500" : "text-white")}>
+                            <span className="text-xl md:text-2xl opacity-80">AED</span>
+                            <span className="text-5xl md:text-6xl">
+                                {data.safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                         </div>
                         {data.spent > 0 && <div className="mt-4 bg-red-600 border border-red-700 text-white text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
                     </div>
