@@ -58,18 +58,17 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
             <div className="space-y-4">
                 {debts.map(debt => (
                     <PaperCard key={debt.id} className="relative group p-6 hover:shadow-md cursor-pointer transition-shadow" >
-                        <div className="flex justify-between items-center" onClick={() => setEditingDebt(debt)}>
-                            <div>
-                                <h4 className={clsx("font-bold text-stone-900 text-xl", debt.total_balance <= 0 && "line-through decoration-red-600 decoration-4 -rotate-2 opacity-60")}>{debt.name}</h4>
-                            </div>
-                            <div className="text-right flex items-center gap-4">
-                                <div>
-                                    <div className={clsx("text-2xl font-mono font-bold", debt.total_balance <= 0 ? "text-stone-300" : "text-stone-800")}>{currency(debt.total_balance)}</div>
-                                    <div className="text-[10px] text-stone-300 uppercase tracking-widest mt-1">Outstanding</div>
-                                </div>
-                                <button onClick={(e) => { e.stopPropagation(); setEditingDebt(debt); }} className="p-2 text-stone-300 hover:text-stone-600 hover:bg-stone-100 rounded-full transition-colors">
-                                    <Pencil size={18} />
+                        <div className="flex flex-col gap-2" onClick={() => setEditingDebt(debt)}>
+                            <div className="flex justify-between items-start">
+                                <h4 className={clsx("font-bold text-stone-900 text-xl break-words max-w-[70%]", debt.total_balance <= 0 && "line-through decoration-red-600 decoration-4 -rotate-2 opacity-60")}>{debt.name}</h4>
+                                <button onClick={(e) => { e.stopPropagation(); setEditingDebt(debt); }} className="text-stone-300 hover:text-stone-600 px-2 py-1 rounded hover:bg-stone-50 transition-colors">
+                                    <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
                                 </button>
+                            </div>
+
+                            <div className="text-right pt-2">
+                                <div className={clsx("text-3xl font-mono font-bold", debt.total_balance <= 0 ? "text-stone-300" : "text-stone-800")}>{currency(debt.total_balance)}</div>
+                                <div className="text-[10px] text-stone-300 uppercase tracking-widest mt-1">Outstanding</div>
                             </div>
                         </div>
                     </PaperCard>
