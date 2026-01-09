@@ -9,6 +9,7 @@ import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
 import { Info, X, LogOut } from "lucide-react";
+import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 
 type DashboardData = {
     safeToSpend: number;
@@ -180,12 +181,17 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </PaperCard>
             </section>
 
+            {/* Tracked Budgets (Envelopes) */}
+            <div className="mt-8">
+                <TrackedBudgetList />
+            </div>
+
             {/* Transactions List */}
             <section className="space-y-3">
                 <div className="flex justify-between items-end px-2">
                     <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Recent Transactions</h3>
-                    <Link href="/categories" className="text-[10px] text-stone-400 underline hover:text-stone-600 font-mono">
-                        Manage Categories
+                    <Link href="/transactions" className="text-[10px] text-stone-400 underline hover:text-stone-600 font-mono">
+                        View All
                     </Link>
                 </div>
 
