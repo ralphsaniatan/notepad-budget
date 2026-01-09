@@ -72,16 +72,27 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         const transactions = allTransactions || [];
 
         let spentVariable = 0;
+        let overspend = 0;
+        const commitmentSpending: Record<string, number> = {};
 
         transactions.forEach((tx: any) => {
             const amount = safeNum(tx.amount);
             if (tx.type === 'income') {
                 income += amount;
             } else if (tx.type === 'expense') {
-                // Check if it's a commitment (Fixed or Variable Fixed)
-                // We support legacy is_commitment OR new commitment_type
-                const isCommitment = tx.categories?.commitment_type || tx.categories?.is_commitment;
-                if (!isCommitment) {
+                // Check if it's a commitment
+                const cat = tx.categories;
+                const isCommitment = cat?.commitment_type || cat?.is_commitment;
+
+                if (isCommitment) {
+                    // Track spending for commitments to check overspend
+                    if (cat?.name) { // relying on name/id, ideally ID but name is consistent in this scope
+                        // We need the category ID to track accurately. 
+                        // The transaction query returns category_id.
+                        const catId = tx.category_id || 'unknown';
+                        commitmentSpending[catId] = (commitmentSpending[catId] || 0) + amount;
+                    }
+                } else {
                     spentVariable += amount;
                 }
             }
@@ -90,15 +101,29 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             }
         });
 
-        // 3. Get Commitments
+        // 3. Get Commitments & Calculate Overspend
         const { data: committedCategories } = await supabase
             .from('categories')
-            .select('budget_limit, commitment_type')
+            .select('id, budget_limit, is_pinned') // Fetch ID for matching
             .eq('user_id', user.id)
             .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
 
-        const totalCommitments = committedCategories?.reduce((sum, cat) => sum + safeNum(cat.budget_limit), 0) || 0;
-        const safeToSpend = (income + rollover) - totalCommitments - spentVariable;
+        let totalCommitments = 0;
+
+        committedCategories?.forEach(cat => {
+            const limit = safeNum(cat.budget_limit);
+            totalCommitments += limit;
+
+            // Calculate Overspend: Max(0, Actual - Limit)
+            const actual = commitmentSpending[cat.id] || 0;
+            const excess = Math.max(0, actual - limit);
+            overspend += excess;
+        });
+
+        // Safe To Spend = (Income + Rollover) - Total Commitments (Envelopes) - Variable Spent - Overspend Penalty
+        // Notice: 'Overspend' is the amount EXCEEDING the envelope. 
+        // The first 'limit' amount was already deducted via 'totalCommitments'.
+        const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
 
         // 4. Get Debts
         const { data: debts } = await supabase
@@ -116,12 +141,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
         // Map transactions for UI
         const recentTransactions = transactions.map((tx: any) => {
-            // Logic: If Debt Payment, prefer Debt Name. Else Description. Else Category Name.
-            // Note: If user entered a specific description, use it. If it matches the default "Debt Payment", try to be smarter.
-            // But user asked for: "it should be described as "Loan" rather than untitled"
             let cleanDescription = tx.description;
             if (tx.type === 'debt_payment' && tx.debts?.name) {
-                // If the description is just the generic default or empty, switch to Debt Name
                 if (!cleanDescription || cleanDescription === 'Debt Payment') {
                     cleanDescription = tx.debts.name;
                 }
@@ -143,7 +164,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
         return {
             safeToSpend,
-            spent: spentVariable,
+            spent: spentVariable + overspend, // Show total "Non-Budgeted" spending? Or just variable? Let's include overspend here so it makes sense in the summary if displayed.
             debts: debts || [],
             recentTransactions,
             categories: categories || [],
@@ -151,7 +172,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
                 income,
                 rollover,
                 commitments: totalCommitments,
-                spent: spentVariable
+                spent: spentVariable + overspend
             },
             userId: user.id,
             email: user.email
@@ -161,6 +182,80 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         console.error("Supabase Error:", error);
         return DEFAULT_DASHBOARD;
     }
+}
+
+export type TrackedBudget = {
+    id: string;
+    name: string;
+    limit: number;
+    spent: number;
+    remaining: number;
+    status: 'ok' | 'warning' | 'over';
+    percent: number;
+};
+
+export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const now = new Date();
+    const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+    // 1. Get Pinned Categories
+    const { data: categories } = await supabase
+        .from('categories')
+        .select('id, name, budget_limit')
+        .eq('user_id', user.id)
+        .eq('is_pinned', true);
+
+    if (!categories || categories.length === 0) return [];
+
+    // 2. Get Spending for these categories in current month
+    // We need the month ID first
+    const { data: month } = await supabase
+        .from('months')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('iso_month', isoMonth)
+        .single();
+
+    if (!month) return categories.map(c => ({
+        id: c.id, name: c.name, limit: Number(c.budget_limit), spent: 0, remaining: Number(c.budget_limit), status: 'ok', percent: 0
+    }));
+
+    const { data: transactions } = await supabase
+        .from('transactions')
+        .select('amount, category_id')
+        .eq('month_id', month.id)
+        .in('category_id', categories.map(c => c.id));
+
+    // 3. Calculate
+    const spendingMap: Record<string, number> = {};
+    transactions?.forEach((tx: any) => {
+        spendingMap[tx.category_id] = (spendingMap[tx.category_id] || 0) + Number(tx.amount);
+    });
+
+    return categories.map(c => {
+        const limit = Number(c.budget_limit);
+        const spent = spendingMap[c.id] || 0;
+        const remaining = limit - spent;
+        const percent = Math.min(100, (spent / limit) * 100);
+
+        let status: 'ok' | 'warning' | 'over' = 'ok';
+        if (remaining < 0) status = 'over';
+        else if (percent > 85) status = 'warning';
+
+        return {
+            id: c.id,
+            name: c.name,
+            limit,
+            spent,
+            remaining, // Can be negative
+            status,
+            percent
+        };
+    });
 }
 
 export async function addTransaction(
@@ -251,30 +346,25 @@ export async function closeMonth() {
             return { success: false, error: "Cannot close month until it has ended." };
         }
 
-        // Calculate Remaining Logic
+        // Calculate Rollover: Income - Total Actual Spending
+        // We do NOT deduct limits. We use strict cash flow.
+
         let income = month.income || 0;
         const rollover = month.rollover || 0;
+        let totalSpent = 0;
 
         const { data: transactions } = await supabase
             .from('transactions')
-            .select('amount, type, categories(is_commitment)')
+            .select('amount, type')
             .eq('month_id', month.id);
 
-        let spentVariable = 0;
         transactions?.forEach((tx: any) => {
             if (tx.type === 'income') income += Number(tx.amount);
-            else if (tx.type === 'expense' && !tx.categories?.is_commitment) spentVariable += Number(tx.amount);
-            else if (tx.type === 'debt_payment') spentVariable += Number(tx.amount);
+            else if (tx.type === 'expense' || tx.type === 'debt_payment') totalSpent += Number(tx.amount);
         });
 
-        const { data: committedCategories } = await supabase
-            .from('categories')
-            .select('budget_limit')
-            .eq('user_id', user.id)
-            .eq('is_commitment', true);
-
-        const totalCommitments = committedCategories?.reduce((sum, cat) => sum + Number(cat.budget_limit), 0) || 0;
-        const remaining = (income + rollover) - totalCommitments - spentVariable;
+        // Remaining = (Previous Rollover + Income) - ALL Outflows
+        const remaining = (income + rollover) - totalSpent;
 
         await supabase.from('months').update({ status: 'closed' }).eq('id', month.id);
 
@@ -320,7 +410,12 @@ export async function addDebt(name: string, balance: number, rate: number) {
     return { success: !error };
 }
 
-export async function addCategory(name: string, commitment_type: 'fixed' | 'variable_fixed' | null, budget_limit: number) {
+export async function addCategory(
+    name: string,
+    commitment_type: 'fixed' | 'variable_fixed' | null,
+    budget_limit: number,
+    is_pinned: boolean = false
+) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
@@ -332,7 +427,8 @@ export async function addCategory(name: string, commitment_type: 'fixed' | 'vari
             name,
             commitment_type,
             is_commitment: !!commitment_type, // Maintain legacy compat
-            budget_limit
+            budget_limit,
+            is_pinned
         });
 
     if (error) {
@@ -521,7 +617,13 @@ export async function deleteSavingsGoal(id: string) {
 
 // --- Category Management ---
 
-export async function updateCategory(id: string, name: string, commitment_type: 'fixed' | 'variable_fixed' | null, budget_limit: number) {
+export async function updateCategory(
+    id: string,
+    name: string,
+    commitment_type: 'fixed' | 'variable_fixed' | null,
+    budget_limit: number,
+    is_pinned: boolean = false
+) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
@@ -532,7 +634,8 @@ export async function updateCategory(id: string, name: string, commitment_type: 
             name,
             commitment_type,
             is_commitment: !!commitment_type,
-            budget_limit
+            budget_limit,
+            is_pinned
         })
         .eq('id', id)
         .eq('user_id', user.id);

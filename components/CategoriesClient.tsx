@@ -11,6 +11,7 @@ type Category = {
     commitment_type: 'fixed' | 'variable_fixed' | null;
     is_commitment: boolean; // Legacy/Compat
     budget_limit: number;
+    is_pinned?: boolean;
 };
 
 export function CategoriesClient({ initialCategories }: { initialCategories: Category[] }) {
@@ -21,6 +22,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
     const [newName, setNewName] = useState("");
     const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(null);
     const [budgetLimit, setBudgetLimit] = useState("");
+    const [isPinned, setIsPinned] = useState(false);
     const [editingCat, setEditingCat] = useState<Category | null>(null);
 
     // Help Toggles
@@ -44,18 +46,18 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
             name: newName,
             commitment_type: commitmentType,
             is_commitment: !!commitmentType,
-            budget_limit: limit
+            budget_limit: limit,
+            is_pinned: isPinned
         };
         setCategories(prev => [...prev, newCat]);
         setNewName("");
         setBudgetLimit("");
-        setNewName("");
-        setBudgetLimit("");
         setCommitmentType(null);
+        setIsPinned(false);
         closeHelp();
 
         try {
-            await addCategory(newName, commitmentType, limit);
+            await addCategory(newName, commitmentType, limit, isPinned);
         } catch (err) {
             console.error(err);
         } finally {
@@ -143,6 +145,21 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                         </div>
                     </div>
 
+                    {/* Pin Toggle for Variable Fixed */}
+                    {commitmentType === 'variable_fixed' && (
+                        <div className="animate-in slide-in-from-top-1 fade-in duration-200">
+                            <label className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isPinned}
+                                    onChange={e => setIsPinned(e.target.checked)}
+                                    className="rounded text-blue-600 focus:ring-blue-600"
+                                />
+                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Pin to Transactions Page</span>
+                            </label>
+                        </div>
+                    )}
+
                     {commitmentType && (
                         <div className="animate-in slide-in-from-top-1 fade-in duration-200 pb-2">
                             <input
@@ -172,14 +189,19 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                     return (
                         <div key={cat.id} className="flex justify-between items-center p-3 bg-white border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors group">
                             <div onClick={() => setEditingCat(cat)} className="flex-1 cursor-pointer">
-                                <span className="font-bold text-stone-800 text-sm">{cat.name}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-stone-800 text-sm">{cat.name}</span>
+                                    {cat.is_pinned && (
+                                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1 py-0.5 rounded border border-stone-200 font-bold uppercase tracking-wider">Pinned</span>
+                                    )}
+                                </div>
                                 {type === 'fixed' && (
-                                    <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                    <span className="inline-block mt-1 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
                                         Fixed: ${cat.budget_limit}
                                     </span>
                                 )}
                                 {type === 'variable_fixed' && (
-                                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                    <span className="inline-block mt-1 text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
                                         Set Aside: ~${cat.budget_limit}
                                     </span>
                                 )}
@@ -220,6 +242,7 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
 
     const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
     const [budgetLimit, setBudgetLimit] = useState(category.budget_limit.toString());
+    const [isPinned, setIsPinned] = useState(category.is_pinned || false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Help Toggles (local to sheet)
@@ -235,13 +258,14 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
     const handleSave = async () => {
         setIsSubmitting(true);
         const limit = parseFloat(budgetLimit) || 0;
-        await updateCategory(category.id, name, commitmentType, limit);
+        await updateCategory(category.id, name, commitmentType, limit, isPinned);
         onUpdate({
             ...category,
             name,
             commitment_type: commitmentType,
             is_commitment: !!commitmentType,
-            budget_limit: limit
+            budget_limit: limit,
+            is_pinned: isPinned
         });
         setIsSubmitting(false);
     };
@@ -334,6 +358,21 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                             )}
                         </div>
                     </div>
+
+                    {/* Pin Toggle for Variable Fixed (Edit) */}
+                    {commitmentType === 'variable_fixed' && (
+                        <div className="animate-in slide-in-from-top-1 fade-in duration-200">
+                            <label className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isPinned}
+                                    onChange={e => setIsPinned(e.target.checked)}
+                                    className="rounded text-blue-600 focus:ring-blue-600"
+                                />
+                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Pin to Transactions Page</span>
+                            </label>
+                        </div>
+                    )}
 
                     {commitmentType && (
                         <div className="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200">
