@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { Plus, Trash2 } from "lucide-react";
-import { addCategory } from "@/app/actions";
+import { Plus, Trash2, Info, X } from "lucide-react";
+import { addCategory, updateCategory, deleteCategory } from "@/app/actions";
 
 type Category = {
     id: string;
     name: string;
-    is_commitment: boolean;
+    commitment_type: 'fixed' | 'variable_fixed' | null;
+    is_commitment: boolean; // Legacy/Compat
     budget_limit: number;
 };
 
@@ -18,9 +19,13 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
 
     // New Category State
     const [newName, setNewName] = useState("");
-    const [isCommitment, setIsCommitment] = useState(false);
+    const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(null);
     const [budgetLimit, setBudgetLimit] = useState("");
     const [editingCat, setEditingCat] = useState<Category | null>(null);
+
+    // Help Toggles
+    const [showFixedHelp, setShowFixedHelp] = useState(false);
+    const [showVarFixedHelp, setShowVarFixedHelp] = useState(false);
 
     const handleAdd = async () => {
         if (!newName) return;
@@ -28,19 +33,20 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
         const limit = parseFloat(budgetLimit) || 0;
 
         // Optimistic
-        const newCat = {
+        const newCat: Category = {
             id: Math.random().toString(),
             name: newName,
-            is_commitment: isCommitment,
+            commitment_type: commitmentType,
+            is_commitment: !!commitmentType,
             budget_limit: limit
         };
         setCategories(prev => [...prev, newCat]);
         setNewName("");
         setBudgetLimit("");
-        setIsCommitment(false);
+        setCommitmentType(null);
 
         try {
-            await addCategory(newName, isCommitment, limit);
+            await addCategory(newName, commitmentType, limit);
         } catch (err) {
             console.error(err);
         } finally {
@@ -52,32 +58,88 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
         <section className="space-y-6">
 
             {/* Add Form */}
-            <PaperCard className="p-4 space-y-3 bg-stone-50 border-2 border-stone-200">
+            <PaperCard className="p-4 space-y-4 bg-stone-50 border-2 border-stone-200">
                 <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Add Category</h3>
+
                 <div className="space-y-3">
                     <input
                         type="text" placeholder="Category Name"
                         value={newName} onChange={e => setNewName(e.target.value)}
                         className="w-full p-2 bg-white border border-stone-200 rounded text-sm outline-none focus:border-stone-400"
                     />
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 text-sm text-stone-600">
+
+                    {/* Type Selection */}
+                    <div className="space-y-2">
+                        <div className="text-xs font-bold text-stone-400 uppercase tracking-widest">Type</div>
+
+                        {/* Standard */}
+                        <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                             <input
-                                type="checkbox"
-                                checked={isCommitment}
-                                onChange={e => setIsCommitment(e.target.checked)}
-                                className="rounded border-stone-300 text-stone-900 focus:ring-stone-900"
+                                type="radio"
+                                name="catType"
+                                checked={commitmentType === null}
+                                onChange={() => setCommitmentType(null)}
+                                className="text-stone-900 focus:ring-stone-900"
                             />
-                            Fixed Bill?
+                            <span className="text-sm font-bold text-stone-700">Standard</span>
+                            <span className="text-xs text-stone-400 ml-auto">(Groceries, Dining)</span>
                         </label>
-                        {isCommitment && (
-                            <input
-                                type="number" placeholder="Budget Limit"
-                                value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
-                                className="flex-1 p-2 bg-white border border-stone-200 rounded text-sm outline-none focus:border-stone-400"
-                            />
-                        )}
+
+                        {/* Fixed */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
+                                <input
+                                    type="radio"
+                                    name="catType"
+                                    checked={commitmentType === 'fixed'}
+                                    onChange={() => setCommitmentType('fixed')}
+                                    className="text-stone-900 focus:ring-stone-900"
+                                />
+                                <span className="text-sm font-bold text-stone-700">Fixed Expense</span>
+                                <button type="button" onClick={(e) => { e.preventDefault(); setShowFixedHelp(!showFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                    <Info size={14} />
+                                </button>
+                            </label>
+                            {showFixedHelp && (
+                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                    <strong>Fixed Expense:</strong> A bill that is the same amount every month (e.g. Rent, Netflix).
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Variable Fixed */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
+                                <input
+                                    type="radio"
+                                    name="catType"
+                                    checked={commitmentType === 'variable_fixed'}
+                                    onChange={() => setCommitmentType('variable_fixed')}
+                                    className="text-stone-900 focus:ring-stone-900"
+                                />
+                                <span className="text-sm font-bold text-stone-700">Variable Fixed</span>
+                                <button type="button" onClick={(e) => { e.preventDefault(); setShowVarFixedHelp(!showVarFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                    <Info size={14} />
+                                </button>
+                            </label>
+                            {showVarFixedHelp && (
+                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                    <strong>Variable Fixed:</strong> You want to set aside money for this (e.g. Petrol), but the actual spend varies month-to-month.
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {commitmentType && (
+                        <div className="animate-in slide-in-from-top-1 fade-in duration-200">
+                            <input
+                                type="number" placeholder="Monthly Limit / Goal"
+                                value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
+                                className="w-full p-2 bg-white border border-stone-200 rounded text-sm outline-none focus:border-stone-400 font-mono font-bold"
+                            />
+                        </div>
+                    )}
+
                 </div>
                 <button
                     onClick={handleAdd}
@@ -90,21 +152,31 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
 
             <div className="space-y-2">
                 <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest px-1">Active Categories</h3>
-                {categories.map(cat => (
-                    <div key={cat.id} className="flex justify-between items-center p-3 bg-white border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors group">
-                        <div onClick={() => setEditingCat(cat)} className="flex-1 cursor-pointer">
-                            <span className="font-bold text-stone-800 text-sm">{cat.name}</span>
-                            {cat.is_commitment && (
-                                <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
-                                    Fixed: ${cat.budget_limit}
-                                </span>
-                            )}
+                {categories.map(cat => {
+                    // Logic to infer type from legacy data if needed
+                    const type = cat.commitment_type || (cat.is_commitment ? 'fixed' : null);
+
+                    return (
+                        <div key={cat.id} className="flex justify-between items-center p-3 bg-white border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors group">
+                            <div onClick={() => setEditingCat(cat)} className="flex-1 cursor-pointer">
+                                <span className="font-bold text-stone-800 text-sm">{cat.name}</span>
+                                {type === 'fixed' && (
+                                    <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                        Fixed: ${cat.budget_limit}
+                                    </span>
+                                )}
+                                {type === 'variable_fixed' && (
+                                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                        Set Aside: ~${cat.budget_limit}
+                                    </span>
+                                )}
+                            </div>
+                            <button onClick={() => setEditingCat(cat)} className="text-stone-300 hover:text-stone-600 px-2">
+                                <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
+                            </button>
                         </div>
-                        <button onClick={() => setEditingCat(cat)} className="text-stone-300 hover:text-stone-600 px-2">
-                            <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
-                        </button>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* Edit Sheet */}
@@ -128,20 +200,30 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
     );
 }
 
-import { updateCategory, deleteCategory } from "@/app/actions";
-import { X } from "lucide-react";
-
 function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category: Category, onClose: () => void, onUpdate: (c: Category) => void, onDelete: (id: string) => void }) {
     const [name, setName] = useState(category.name);
-    const [isCommitment, setIsCommitment] = useState(category.is_commitment);
+    // Infer initial state
+    const initialType = category.commitment_type || (category.is_commitment ? 'fixed' : null);
+
+    const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
     const [budgetLimit, setBudgetLimit] = useState(category.budget_limit.toString());
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Help Toggles (local to sheet)
+    const [showFixedHelp, setShowFixedHelp] = useState(false);
+    const [showVarFixedHelp, setShowVarFixedHelp] = useState(false);
 
     const handleSave = async () => {
         setIsSubmitting(true);
         const limit = parseFloat(budgetLimit) || 0;
-        await updateCategory(category.id, name, isCommitment, limit);
-        onUpdate({ ...category, name, is_commitment: isCommitment, budget_limit: limit });
+        await updateCategory(category.id, name, commitmentType, limit);
+        onUpdate({
+            ...category,
+            name,
+            commitment_type: commitmentType,
+            is_commitment: !!commitmentType,
+            budget_limit: limit
+        });
         setIsSubmitting(false);
     };
 
@@ -155,7 +237,7 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
 
     return (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
+            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center">
                     <h2 className="text-lg font-bold text-stone-900">Edit Category</h2>
                     <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
@@ -168,19 +250,70 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                         type="text" value={name} onChange={e => setName(e.target.value)}
                         className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
                     />
-                    <div className="flex items-center gap-4 py-2">
-                        <label className="flex items-center gap-2 text-sm text-stone-600 font-bold">
+
+                    {/* Type Selection */}
+                    <div className="space-y-2">
+                        <div className="text-xs font-bold text-stone-400 uppercase tracking-widest">Type</div>
+
+                        {/* Standard */}
+                        <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                             <input
-                                type="checkbox"
-                                checked={isCommitment}
-                                onChange={e => setIsCommitment(e.target.checked)}
-                                className="rounded border-stone-300 text-stone-900 focus:ring-stone-900"
+                                type="radio"
+                                name="editCatType"
+                                checked={commitmentType === null}
+                                onChange={() => setCommitmentType(null)}
+                                className="text-stone-900 focus:ring-stone-900"
                             />
-                            Fixed Bill / Commitment
+                            <span className="text-sm font-bold text-stone-700">Standard</span>
                         </label>
+
+                        {/* Fixed */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
+                                <input
+                                    type="radio"
+                                    name="editCatType"
+                                    checked={commitmentType === 'fixed'}
+                                    onChange={() => setCommitmentType('fixed')}
+                                    className="text-stone-900 focus:ring-stone-900"
+                                />
+                                <span className="text-sm font-bold text-stone-700">Fixed Expense</span>
+                                <button type="button" onClick={(e) => { e.preventDefault(); setShowFixedHelp(!showFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                    <Info size={14} />
+                                </button>
+                            </label>
+                            {showFixedHelp && (
+                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                    <strong>Fixed Expense:</strong> A bill that is the same amount every month (e.g. Rent, Netflix).
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Variable Fixed */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
+                                <input
+                                    type="radio"
+                                    name="editCatType"
+                                    checked={commitmentType === 'variable_fixed'}
+                                    onChange={() => setCommitmentType('variable_fixed')}
+                                    className="text-stone-900 focus:ring-stone-900"
+                                />
+                                <span className="text-sm font-bold text-stone-700">Variable Fixed</span>
+                                <button type="button" onClick={(e) => { e.preventDefault(); setShowVarFixedHelp(!showVarFixedHelp) }} className="p-1 text-stone-300 hover:text-stone-600">
+                                    <Info size={14} />
+                                </button>
+                            </label>
+                            {showVarFixedHelp && (
+                                <div className="absolute top-full left-0 mt-1 z-10 w-full bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                    <strong>Variable Fixed:</strong> You want to set aside money for this (e.g. Petrol), but the actual spend varies month-to-month.
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    {isCommitment && (
-                        <div className="space-y-2">
+
+                    {commitmentType && (
+                        <div className="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200">
                             <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Budget Limit</label>
                             <input
                                 type="number"

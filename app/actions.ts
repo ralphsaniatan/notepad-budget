@@ -61,7 +61,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             .from('transactions')
             .select(`
                 *,
-                categories ( name, is_commitment ),
+                categories ( name, is_commitment, commitment_type ),
                 debts ( name )
             `)
             .eq('user_id', user.id)
@@ -78,7 +78,9 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             if (tx.type === 'income') {
                 income += amount;
             } else if (tx.type === 'expense') {
-                const isCommitment = tx.categories?.is_commitment;
+                // Check if it's a commitment (Fixed or Variable Fixed)
+                // We support legacy is_commitment OR new commitment_type
+                const isCommitment = tx.categories?.commitment_type || tx.categories?.is_commitment;
                 if (!isCommitment) {
                     spentVariable += amount;
                 }
@@ -91,9 +93,9 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // 3. Get Commitments
         const { data: committedCategories } = await supabase
             .from('categories')
-            .select('budget_limit')
+            .select('budget_limit, commitment_type')
             .eq('user_id', user.id)
-            .eq('is_commitment', true);
+            .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
 
         const totalCommitments = committedCategories?.reduce((sum, cat) => sum + safeNum(cat.budget_limit), 0) || 0;
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable;
@@ -318,7 +320,7 @@ export async function addDebt(name: string, balance: number, rate: number) {
     return { success: !error };
 }
 
-export async function addCategory(name: string, is_commitment: boolean, budget_limit: number) {
+export async function addCategory(name: string, commitment_type: 'fixed' | 'variable_fixed' | null, budget_limit: number) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
@@ -328,7 +330,8 @@ export async function addCategory(name: string, is_commitment: boolean, budget_l
         .insert({
             user_id: user.id,
             name,
-            is_commitment,
+            commitment_type,
+            is_commitment: !!commitment_type, // Maintain legacy compat
             budget_limit
         });
 
@@ -518,14 +521,19 @@ export async function deleteSavingsGoal(id: string) {
 
 // --- Category Management ---
 
-export async function updateCategory(id: string, name: string, is_commitment: boolean, budget_limit: number) {
+export async function updateCategory(id: string, name: string, commitment_type: 'fixed' | 'variable_fixed' | null, budget_limit: number) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
         .from('categories')
-        .update({ name, is_commitment, budget_limit })
+        .update({
+            name,
+            commitment_type,
+            is_commitment: !!commitment_type,
+            budget_limit
+        })
         .eq('id', id)
         .eq('user_id', user.id);
 
