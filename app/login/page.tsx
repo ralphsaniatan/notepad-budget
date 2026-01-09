@@ -44,7 +44,7 @@ export default function LoginPage() {
                                     type="password"
                                     required
                                     autoFocus
-                                    placeholder="Enter budget123"
+                                    placeholder="Enter your password"
                                     className="w-full pl-10 pr-4 py-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono text-stone-900 outline-none focus:border-stone-900 transition-colors placeholder:text-stone-300"
                                 />
                             </div>

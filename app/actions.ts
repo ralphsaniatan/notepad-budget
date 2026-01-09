@@ -49,7 +49,8 @@ export async function getDashboardData(): Promise<DashboardData> {
             .from('transactions')
             .select(`
                 *,
-                categories ( name, is_commitment )
+                categories ( name, is_commitment ),
+                debts ( name )
             `)
             .eq('user_id', user.id)
             .gte('date', isoMonth) // Only current month transactions for calculations
@@ -98,16 +99,31 @@ export async function getDashboardData(): Promise<DashboardData> {
             .order('name');
 
         // Map transactions for UI
-        const recentTransactions = transactions.slice(0, 20).map((tx: any) => ({
-            id: tx.id,
-            description: tx.description || (tx.categories?.name) || 'Untitled',
-            amount: tx.amount,
-            type: tx.type,
-            date: tx.date || new Date().toISOString(),
-            category_name: tx.categories?.name,
-            category_id: tx.category_id,
-            debt_id: tx.debt_id
-        }));
+        const recentTransactions = transactions.slice(0, 20).map((tx: any) => {
+            // Logic: If Debt Payment, prefer Debt Name. Else Description. Else Category Name.
+            // Note: If user entered a specific description, use it. If it matches the default "Debt Payment", try to be smarter.
+            // But user asked for: "it should be described as "Loan" rather than untitled"
+            let cleanDescription = tx.description;
+            if (tx.type === 'debt_payment' && tx.debts?.name) {
+                // If the description is just the generic default or empty, switch to Debt Name
+                if (!cleanDescription || cleanDescription === 'Debt Payment') {
+                    cleanDescription = tx.debts.name;
+                }
+            }
+            if (!cleanDescription && tx.categories?.name) cleanDescription = tx.categories.name;
+            if (!cleanDescription) cleanDescription = "Untitled";
+
+            return {
+                id: tx.id,
+                description: cleanDescription,
+                amount: tx.amount,
+                type: tx.type,
+                date: tx.date || new Date().toISOString(),
+                category_name: tx.categories?.name,
+                category_id: tx.category_id,
+                debt_id: tx.debt_id
+            };
+        });
 
         return {
             safeToSpend,

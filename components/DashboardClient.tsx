@@ -126,7 +126,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <div className="text-6xl font-mono font-bold tracking-tighter">
                             {currency(data.safeToSpend)}
                         </div>
-                        {data.spent > 0 && <div className="mt-4 bg-stone-900 border border-red-900/50 text-red-500 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
+                        {data.spent > 0 && <div className="mt-4 bg-red-600 border border-red-700 text-white text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
                     </div>
                 </PaperCard>
             </section>
@@ -154,7 +154,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                                     className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
                                 >
                                     <div>
-                                        <div className="font-bold text-stone-800 text-sm">{tx.description}</div>
+                                        <div className="font-bold text-stone-800 text-sm capitalize">{tx.description}</div>
                                         <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
                                             <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                             {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
