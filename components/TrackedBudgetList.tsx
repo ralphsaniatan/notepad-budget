@@ -31,23 +31,19 @@ export function TrackedBudgetList() {
     return (
         <section className="mb-8">
             <h2 className="text-xs uppercase font-bold tracking-widest text-stone-400 mb-3 px-1">Pinned Budgets</h2>
-            <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 scrollbar-hide snap-x">
+            <div className="flex flex-col gap-4">
                 {budgets.map(b => (
-                    <div key={b.id} className="snap-center shrink-0 w-[85%] sm:w-[300px]">
+                    <div key={b.id} className="w-full">
                         <PaperCard className="p-4 space-y-3 border-l-4 border-l-stone-900">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h3 className="font-bold text-stone-900">{b.name}</h3>
-                                    <p className="text-xs text-stone-500 font-mono">
-                                        Goal: <span className="text-stone-900">AED {b.limit}</span>
-                                    </p>
-                                </div>
-                                <div className={`text-right ${getStatusColor(b.status)}`}>
-                                    <span className="block text-lg font-bold">
-                                        {b.status === 'over' ? '+' : ''}AED {Math.abs(b.remaining).toFixed(0)}
+                            <div className="flex justify-between items-end mb-1">
+                                <h3 className="font-bold text-stone-900">{b.name}</h3>
+                                <div className="text-right font-mono text-sm font-bold">
+                                    <span className={getStatusColor(b.status)}>
+                                        AED {Math.abs(b.remaining).toFixed(0)}
                                     </span>
-                                    <span className="text-[10px] font-bold uppercase tracking-wide">
-                                        {b.status === 'over' ? 'Overspent' : 'Left'}
+                                    <span className="text-stone-300"> / {b.limit}</span>
+                                    <span className="ml-1 text-[10px] uppercase text-stone-400 tracking-wider">
+                                        {b.status === 'over' ? 'Over' : 'Left'}
                                     </span>
                                 </div>
                             </div>
@@ -58,11 +54,6 @@ export function TrackedBudgetList() {
                                     className={`h-full rounded-full transition-all duration-500 ${getProgressBarColor(b.status, b.percent)}`}
                                     style={{ width: `${Math.min(100, b.percent)}%` }}
                                 />
-                            </div>
-
-                            <div className="flex justify-between text-[10px] text-stone-400 font-mono">
-                                <span>{b.percent.toFixed(0)}% used</span>
-                                <span>AED {b.spent} spent</span>
                             </div>
                         </PaperCard>
                     </div>
