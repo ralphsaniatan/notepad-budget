@@ -154,6 +154,41 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         }
     };
 
+    // Pull to Refresh State
+    const [pullChange, setPullChange] = useState(0);
+    const [touchStart, setTouchStart] = useState(0);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const onTouchStart = (e: React.TouchEvent) => {
+        if (window.scrollY === 0) {
+            setTouchStart(e.touches[0].clientY);
+        }
+    };
+
+    const onTouchMove = (e: React.TouchEvent) => {
+        // Only track if we started at top and are pulling down
+        if (touchStart === 0 || window.scrollY > 0) return;
+
+        const currentTouch = e.touches[0].clientY;
+        const diff = currentTouch - touchStart;
+
+        // Dampen the pull
+        if (diff > 0) {
+            setPullChange(diff * 0.4);
+            // Prevent default to stop native overscroll in some browsers (optional, careful with scroll)
+        }
+    };
+
+    const onTouchEnd = () => {
+        if (pullChange > 100) {
+            setIsRefreshing(true);
+            window.location.reload();
+        } else {
+            setPullChange(0);
+            setTouchStart(0);
+        }
+    };
+
     const handleCloseMonth = async () => {
         if (!confirm("Are you sure? This will Archive the current month and start fresh.")) return;
 
@@ -174,7 +209,23 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     };
 
     return (
-        <main className="min-h-screen p-4 md:p-6 max-w-lg mx-auto space-y-6 pb-40">
+        <main
+            className="min-h-screen p-4 md:p-6 max-w-lg mx-auto space-y-6 pb-40 relative transition-transform duration-200 ease-out"
+            style={{ transform: `translateY(${pullChange}px)` }}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+        >
+            {/* Refresh Indicator */}
+            <div
+                className="absolute top-0 left-0 right-0 flex justify-center -mt-10 pointer-events-none"
+                style={{ opacity: Math.min(1, pullChange / 50) }}
+            >
+                <span className="text-xs font-bold uppercase tracking-widest text-stone-400">
+                    {isRefreshing ? "Refreshing..." : pullChange > 100 ? "Release to Refresh" : "Pull to Refresh"}
+                </span>
+            </div>
+
             {/* App Header */}
             <header className="flex justify-between items-center mt-4">
                 <h1 className="font-bold text-stone-900 tracking-tight text-xl">Notepad Budget</h1>
