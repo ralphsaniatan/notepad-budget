@@ -358,6 +358,8 @@ export async function updateTransaction(
     return { success: true };
 }
 
+// ... existing code ...
+
 export async function deleteTransaction(id: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -375,5 +377,89 @@ export async function deleteTransaction(id: string) {
     }
 
     revalidatePath('/', 'layout');
+    return { success: true };
+}
+
+// --- Savings Goals Actions ---
+
+export type SavingsGoal = {
+    id: string;
+    name: string;
+    target_amount: number;
+    current_amount: number;
+    target_date: string;
+};
+
+export async function getSavingsGoals(): Promise<SavingsGoal[]> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data } = await supabase
+        .from('savings_goals')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('target_date', { ascending: true });
+
+    return data || [];
+}
+
+export async function addSavingsGoal(name: string, targetAmount: number, targetDate: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    const { error } = await supabase
+        .from('savings_goals')
+        .insert({
+            user_id: user.id,
+            name,
+            target_amount: targetAmount,
+            target_date: targetDate,
+            current_amount: 0
+        });
+
+    if (error) {
+        console.error("Add Savings Goal Error:", error);
+        return { success: false, error: error.message };
+    }
+
+    revalidatePath('/savings');
+    return { success: true };
+}
+
+export async function contributeToSavings(goalId: string, amount: number, goalName: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // 1. Log as Expense (reduces Safe to Spend)
+    // We will treat this as a "Savings Contribution" expense.
+    // Ideally we might want a 'savings' category or type, but 'expense' works for now to reduce safe-to-spend.
+    const description = `Saved for ${goalName}`;
+    const txRes = await addTransaction(amount, description, 'expense', undefined, undefined);
+
+    if (!txRes.success) return txRes;
+
+    // 2. Update Goal Current Amount
+    // We need to fetch current first to be safe or use increment if supabase supported it easily in js client (rpc)
+    // Simple fetch and update for now.
+    const { data: goal } = await supabase.from('savings_goals').select('current_amount').eq('id', goalId).single();
+    if (!goal) return { success: false, error: "Goal not found" };
+
+    const newAmount = Number(goal.current_amount) + amount;
+
+    const { error } = await supabase
+        .from('savings_goals')
+        .update({ current_amount: newAmount })
+        .eq('id', goalId);
+
+    if (error) {
+        console.error("Update Goal Error:", error);
+        return { success: false, error: error.message };
+    }
+
+    revalidatePath('/savings');
+    revalidatePath('/', 'layout'); // Update dashboard safe-to-spend
     return { success: true };
 }
