@@ -99,7 +99,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                         </label>
 
                         {/* Fixed */}
-                        <div className="relative z-50">
+                        <div className={`relative ${showFixedHelp ? 'z-50' : 'z-0'}`}>
                             <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                                 <input
                                     type="radio"
@@ -114,14 +114,14 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                 </button>
                             </label>
                             {showFixedHelp && (
-                                <div className="absolute top-full right-0 mt-1 z-50 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                <div className="absolute top-full right-0 mt-1 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
                                     <strong>Fixed Expense:</strong> A bill that is the same amount every month (e.g. Rent, Netflix).
                                 </div>
                             )}
                         </div>
 
                         {/* Variable Fixed */}
-                        <div className="relative z-50">
+                        <div className={`relative ${showVarFixedHelp ? 'z-50' : 'z-0'}`}>
                             <label className="flex items-center gap-2 p-3 bg-white border border-stone-100 rounded-lg cursor-pointer hover:bg-stone-50 transition-colors">
                                 <input
                                     type="radio"
@@ -136,7 +136,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                 </button>
                             </label>
                             {showVarFixedHelp && (
-                                <div className="absolute top-full right-0 mt-1 z-50 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
+                                <div className="absolute top-full right-0 mt-1 w-64 bg-stone-800 text-white text-xs p-3 rounded shadow-xl animate-in fade-in zoom-in duration-200">
                                     <strong>Variable Fixed:</strong> You want to set aside money for this (e.g. Petrol), but the actual spend varies month-to-month.
                                 </div>
                             )}
@@ -144,7 +144,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                     </div>
 
                     {commitmentType && (
-                        <div className="animate-in slide-in-from-top-1 fade-in duration-200">
+                        <div className="animate-in slide-in-from-top-1 fade-in duration-200 pb-2">
                             <input
                                 type="number" placeholder="Monthly Limit / Goal"
                                 value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
