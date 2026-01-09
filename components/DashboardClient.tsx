@@ -156,11 +156,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
             {/* Hero Card */}
             <section>
-                <PaperCard className="bg-stone-900 text-stone-50 border-stone-800 shadow-xl transition-transform hover:scale-[1.01] relative">
+                <PaperCard className="bg-white text-stone-900 border-stone-200 shadow-xl transition-transform hover:scale-[1.01] relative">
                     {/* Info Icon */}
                     <button
                         onClick={() => setShowBreakdown(true)}
-                        className="absolute top-4 right-4 text-stone-500 hover:text-stone-300 transition-colors"
+                        className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-colors"
                     >
                         <Info size={20} />
                     </button>
@@ -169,13 +169,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
                             Safe to Spend
                         </span>
-                        <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-500" : "text-white")}>
-                            <span className="text-xl md:text-2xl opacity-80">AED</span>
+                        <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
+                            <span className="text-xl md:text-2xl opacity-60">AED</span>
                             <span className="text-5xl md:text-6xl">
                                 {data.safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                         </div>
-                        {data.spent > 0 && <div className="mt-4 bg-red-600 border border-red-700 text-white text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
+                        {data.spent > 0 && <div className="mt-4 bg-red-100 border border-red-200 text-red-700 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
                     </div>
                 </PaperCard>
             </section>
@@ -335,7 +335,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
                 <div className="text-[10px] text-stone-300 font-mono select-all">
                     {data.email} <br />
-                    UID: {data.userId?.slice(-4) || '----'} | v1.22.2
+                    UID: {data.userId?.slice(-4) || '----'} | v1.22.3
                 </div>
             </footer>
         </main>
