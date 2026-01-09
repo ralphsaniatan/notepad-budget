@@ -333,7 +333,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
                 <div className="text-[10px] text-stone-300 font-mono select-all">
                     {data.email} <br />
-                    UID: {data.userId?.slice(-4) || '----'} | v1.20
+                    UID: {data.userId?.slice(-4) || '----'} | v1.22
                 </div>
             </footer>
         </main>

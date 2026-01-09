@@ -232,7 +232,7 @@ export default function LoginPage() {
                 {view === 'SELECT' ? renderUserSelection() : renderForm()}
 
                 <p className="text-center text-[10px] text-stone-300 font-mono">
-                    v1.20 | Secure & Private
+                    v1.22 | Secure & Private
                 </p>
             </div>
         </main>
