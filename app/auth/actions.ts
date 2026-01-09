@@ -5,9 +5,25 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 export async function signIn(formData: FormData) {
-    const email = formData.get("email") as string;
+    let email = formData.get("email") as string; // User might enter "Ralph"
     const password = formData.get("password") as string;
     const supabase = await createClient();
+
+    // UNTESTED: Username Resolution
+    // If no '@', assume it's a username and look up the real email
+    if (!email.includes('@')) {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('email')
+            .ilike('username', email)
+            .single();
+
+        if (profile?.email) {
+            email = profile.email;
+        } else {
+            return { error: "Username not found. Please try your email." };
+        }
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -28,7 +44,7 @@ export async function signUp(formData: FormData) {
     const displayName = formData.get("displayName") as string;
     const supabase = await createClient();
 
-    const { error } = await supabase.auth.signUp({
+    const { data: authData, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -40,6 +56,15 @@ export async function signUp(formData: FormData) {
 
     if (error) {
         return { error: error.message };
+    }
+
+    // Insert into Public Profile (for Username Login)
+    if (authData.user) {
+        await supabase.from('profiles').insert({
+            id: authData.user.id,
+            username: displayName,
+            email: email
+        });
     }
 
     revalidatePath("/", "layout");

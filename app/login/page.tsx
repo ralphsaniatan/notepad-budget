@@ -169,12 +169,12 @@ export default function LoginPage() {
                 )}
 
                 <div className="space-y-2">
-                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Email Address</label>
+                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Email or Username</label>
                     <input
                         name="email"
-                        type="email"
+                        type="text"
                         required
-                        placeholder="name@example.com"
+                        placeholder="e.g. Ralph or ralph@example.com"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold text-stone-900 outline-none focus:border-stone-900 transition-colors placeholder:text-stone-300"
