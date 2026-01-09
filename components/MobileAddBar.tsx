@@ -62,7 +62,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         <div className="bg-white rounded-xl p-6 shadow-sm border border-stone-200 text-center space-y-2">
                             <div className="text-xs font-bold text-stone-400 uppercase tracking-widest">Amount</div>
                             <div className="relative inline-block">
-                                <span className="absolute -left-6 top-1/2 -translate-y-1/2 text-3xl text-stone-400 font-mono">$</span>
+                                <span className="absolute -left-10 top-1/2 -translate-y-1/2 text-xl text-stone-400 font-mono font-bold">AED</span>
                                 <input
                                     type="number"
                                     autoFocus

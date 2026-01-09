@@ -22,7 +22,7 @@ export default function Loading() {
                         src={`/loading-frame-${i}.png`}
                         alt="Crunching Numbers"
                         fill
-                        className={`object-contain mix-blend-multiply transition-opacity duration-75 ${frame === i ? 'opacity-100' : 'opacity-0'}`}
+                        className={`object-contain mix-blend-multiply grayscale contrast-125 brightness-110 transition-opacity duration-75 ${frame === i ? 'opacity-100' : 'opacity-0'}`}
                         priority
                     />
                 ))}
