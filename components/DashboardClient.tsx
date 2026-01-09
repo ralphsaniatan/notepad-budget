@@ -223,8 +223,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             {/* Savings & Debts Links */}
             <section className="pt-4 border-t border-stone-200 border-dashed grid grid-cols-2 gap-4">
                 <Link href="/savings">
-                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full">
-                        <div className="p-3 flex flex-col justify-between h-full min-h-[100px]">
+                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
+                        <div className="flex flex-col justify-between h-full min-h-[100px]">
                             <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Future Expenses</h3>
                             <div className="text-lg font-bold text-stone-800 flex items-center gap-1">
                                 Planning &rarr;
@@ -234,8 +234,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </Link>
 
                 <Link href="/debts">
-                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full">
-                        <div className="p-3 flex flex-col justify-between h-full min-h-[100px]">
+                    <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
+                        <div className="flex flex-col justify-between h-full min-h-[100px]">
                             <div>
                                 <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total Debt</h3>
                             </div>
