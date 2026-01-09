@@ -3,7 +3,93 @@
 import { useState, useEffect } from "react";
 import { signOut } from "@/app/auth/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { addTransaction, closeMonth } from "@/app/actions";
+import { getTransactions } from "@/app/actions";
+
+// ... inside component ...
+const [transactions, setTransactions] = useState(initialData.recentTransactions);
+const [offset, setOffset] = useState(10);
+const [isLoadingMore, setIsLoadingMore] = useState(false);
+const [hasMore, setHasMore] = useState(true);
+
+// Sync if initialData changes (e.g. month change)
+useEffect(() => {
+    setTransactions(initialData.recentTransactions);
+    setOffset(10);
+    setHasMore(true);
+}, [initialData]);
+
+const handleLoadMore = async () => {
+    setIsLoadingMore(true);
+    try {
+        // we can pass current month iso string if we want strict month filtering, 
+        // but for "recent" flow often indefinite scrolling is preferred. 
+        // let's stick to current month for consistency with dashboard data
+        const isoMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
+        const more = await getTransactions(offset, 10, isoMonth); // Fetch next 10
+
+        if (more.length < 10) setHasMore(false);
+        setTransactions(prev => [...prev, ...more]);
+        setOffset(prev => prev + 10);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsLoadingMore(false);
+    }
+};
+
+// ... in render ...
+
+{/* Transactions List */ }
+<section className="space-y-3">
+    <div className="flex justify-between items-end px-2">
+        <h3 className="text-stone-500 text-xs uppercase font-bold tracking-widest">Recent Transactions</h3>
+        <Link href="/categories" className="text-[10px] text-stone-400 underline hover:text-stone-600 font-mono">
+            Manage Categories
+        </Link>
+    </div>
+
+    <div className="relative">
+        <div className="space-y-2">
+            {transactions.length === 0 ? (
+                <p className="text-stone-300 text-sm p-8 text-center italic border-2 border-dashed border-stone-200 rounded-xl">
+                    No transactions yet.<br /><span className="text-xs">Tap + to add one.</span>
+                </p>
+            ) : (
+                <>
+                    {transactions.map(tx => (
+                        <div
+                            key={tx.id}
+                            onClick={() => setEditingTx(tx)}
+                            className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
+                        >
+                            <div>
+                                <div className="font-bold text-stone-800 text-sm capitalize">{tx.description}</div>
+                                <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
+                                    <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                    {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
+                                    {tx.category_name && tx.type !== 'debt_payment' ? <span className="text-stone-300">• {tx.category_name}</span> : ''}
+                                </div>
+                            </div>
+                            <div className={clsx("font-mono font-bold text-sm", tx.type === 'income' ? "text-green-600" : "text-stone-900")}>
+                                {tx.type === 'income' ? '+' : '-'}{currency(tx.amount)}
+                            </div>
+                        </div>
+                    ))}
+
+                    {hasMore && (
+                        <button
+                            onClick={handleLoadMore}
+                            disabled={isLoadingMore}
+                            className="w-full py-3 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-lg transition-colors border border-dashed border-stone-200"
+                        >
+                            {isLoadingMore ? "Loading..." : "Load More"}
+                        </button>
+                    )}
+                </>
+            )}
+        </div>
+    </div>
+</section>
 import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";

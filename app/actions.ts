@@ -164,9 +164,9 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
         return {
             safeToSpend,
-            spent: spentVariable + overspend, // Show total "Non-Budgeted" spending? Or just variable? Let's include overspend here so it makes sense in the summary if displayed.
+            spent: spentVariable + overspend,
             debts: debts || [],
-            recentTransactions,
+            recentTransactions: recentTransactions.slice(0, 10), // Limit initial load
             categories: categories || [],
             breakdown: {
                 income,
@@ -178,11 +178,61 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             email: user.email
         };
 
+
     } catch (error) {
         console.error("Supabase Error:", error);
         return DEFAULT_DASHBOARD;
     }
 }
+
+export async function getTransactions(offset: number = 0, limit: number = 10, monthIso?: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    let query = supabase
+        .from('transactions')
+        .select(`
+            *,
+            categories ( id, name ),
+            debts ( name )
+        `)
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+    if (monthIso) {
+        // Stick to "Current Month" consistency if param provided
+        query = query.gte('date', monthIso);
+    }
+
+    const { data } = await query;
+    if (!data) return [];
+
+    return data.map((tx: any) => {
+        let cleanDescription = tx.description;
+        if (tx.type === 'debt_payment' && tx.debts?.name) {
+            if (!cleanDescription || cleanDescription === 'Debt Payment') {
+                cleanDescription = tx.debts.name;
+            }
+        }
+        if (!cleanDescription && tx.categories?.name) cleanDescription = tx.categories.name;
+
+        return {
+            id: tx.id,
+            description: cleanDescription || 'Untitled',
+            amount: Number(tx.amount),
+            type: tx.type,
+            date: tx.date,
+            category_name: cleanDescription,
+            category_id: tx.categories?.id,
+            debt_id: tx.debt_id
+        };
+    });
+}
+
+
 
 export type TrackedBudget = {
     id: string;
