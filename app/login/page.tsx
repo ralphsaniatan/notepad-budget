@@ -229,6 +229,12 @@ export default function LoginPage() {
     return (
         <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-stone-100/50">
             <div className="w-full max-w-sm space-y-6">
+                {/* Logo & Branding */}
+                <div className="text-center space-y-2 mb-4">
+                    <img src="/logo.png" alt="NB Logo" className="w-16 h-16 mx-auto" />
+                    <h1 className="text-lg font-bold text-stone-900 tracking-tight">Notepad Budget</h1>
+                </div>
+
                 {view === 'SELECT' ? renderUserSelection() : renderForm()}
 
                 <p className="text-center text-[10px] text-stone-300 font-mono">

@@ -2,17 +2,22 @@
 
 import { useState } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { Plus, X, TrendingUp, PiggyBank } from "lucide-react";
+import { Plus, X, PiggyBank } from "lucide-react";
 import { addSavingsGoal, contributeToSavings, updateSavingsGoal, deleteSavingsGoal, SavingsGoal } from "@/app/actions";
 import clsx from "clsx";
 import Link from "next/link";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
 
 export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] }) {
-    const [goals, setGoals] = useState<SavingsGoal[]>(initialGoals);
+    // Live Query from Dexie
+    const goals = useLiveQuery(() => db.savings_goals.toArray()) || initialGoals;
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
-    const [contributeGoal, setContributeGoal] = useState<SavingsGoal | null>(null);
-    const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
+    const [contributeGoal, setContributeGoal] = useState<any>(null); // Weak type for Dexie compat for now
+    const [editingGoal, setEditingGoal] = useState<any>(null);
 
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
@@ -23,12 +28,23 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
 
         setIsSubmitting(true);
         try {
-            const res = await addSavingsGoal(name, targetAmount, targetDateStr);
-            if (res.success) {
-                window.location.reload(); // Simple reload to refresh data
-            } else {
-                alert("Error: " + res.error);
-            }
+            // 1. Local Write
+            const newGoal = {
+                id: crypto.randomUUID(),
+                name,
+                target_amount: targetAmount,
+                target_date: targetDateStr,
+                current_amount: 0,
+                user_id: 'unknown',
+                sync_status: 'created' as const
+            };
+            await db.savings_goals.add(newGoal);
+
+            // 2. Server Action (Hybrid Sync)
+            // Ideally SyncManager handles this. For now, fire and forget (or await for safety)
+            await addSavingsGoal(name, targetAmount, targetDateStr);
+
+            setShowAddForm(false);
         } catch (err) {
             console.error(err);
         } finally {
@@ -42,22 +58,74 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
         if (isNaN(amount) || amount <= 0) return;
 
         setIsSubmitting(true);
+
         try {
-            const res = await contributeToSavings(contributeGoal.id, amount, contributeGoal.name);
-            if (res.success) {
-                window.location.reload();
-            } else {
-                alert("Error: " + res.error);
-            }
+            // 1. Local Write: Create Expense Transaction
+            const tx = {
+                id: crypto.randomUUID(),
+                description: `Saved for ${contributeGoal.name}`,
+                amount: amount,
+                type: 'expense' as const, // Consumes "Safe to Spend"
+                date: new Date().toISOString(), // Today
+                user_id: 'unknown',
+                created_at: new Date().toISOString(),
+                sync_status: 'created' as const
+            };
+
+            await db.transactions.add(tx);
+
+            // 2. Local Write: Update Goal Amount
+            const newAmount = Number(contributeGoal.current_amount) + amount;
+            await db.savings_goals.update(contributeGoal.id, {
+                current_amount: newAmount,
+                sync_status: 'updated'
+            });
+
+            setContributeGoal(null);
+
+            toast.success(`Contributed ${currency(amount)} to ${contributeGoal.name}`, {
+                description: "Safe-to-Spend has been reduced."
+            });
+
+            // 3. Server Action (Hybrid Sync)
+            await contributeToSavings(contributeGoal.id, amount, contributeGoal.name);
+
         } catch (err) {
-            console.error(err);
+            console.error("Contribute Error:", err);
+            // alert("Error contributing: " + err); // Keep generic logging
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    const handleUpdate = async (goal: any) => {
+        setIsSubmitting(true);
+        try {
+            await db.savings_goals.update(goal.id, { ...goal, sync_status: 'updated' });
+            setEditingGoal(null);
+            await updateSavingsGoal(goal.id, goal.name, goal.target_amount, goal.target_date);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    const handleDelete = async (id: string) => {
+        setIsSubmitting(true);
+        try {
+            await db.savings_goals.delete(id);
+            setEditingGoal(null);
+            await deleteSavingsGoal(id);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
     // Calculate suggestion
-    const getSuggestion = (g: SavingsGoal) => {
+    const getSuggestion = (g: any) => {
         const now = new Date();
         const target = new Date(g.target_date);
         const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
@@ -73,7 +141,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
             <header className="flex justify-between items-center mt-4">
                 <div className="flex items-center gap-2">
                     <Link href="/" className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&larr;</Link>
-                    <h1 className="font-bold text-stone-900 tracking-tight text-xl">Future Expenses</h1>
+                    <h1 className="font-bold text-stone-900 tracking-tight text-xl">Money Goals</h1>
                 </div>
             </header>
 
@@ -82,7 +150,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                 {goals.length === 0 ? (
                     <PaperCard className="opacity-50 border-dashed p-8 text-center bg-stone-50/50">
                         <PiggyBank className="mx-auto mb-2 text-stone-300" size={32} />
-                        <p className="text-stone-400 text-sm">No expenses planned.</p>
+                        <p className="text-stone-400 text-sm">No money goals yet.</p>
                     </PaperCard>
                 ) : (
                     goals.map(g => {
@@ -146,7 +214,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                     onClick={() => setShowAddForm(true)}
                     className="bg-stone-900 text-white shadow-xl px-6 py-4 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-black transition-transform active:scale-95"
                 >
-                    <Plus size={20} /> Add Future Expense
+                    <Plus size={20} /> Add Goal
                 </button>
             </div>
 
@@ -162,14 +230,8 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                 <EditGoalSheet
                     goal={editingGoal}
                     onClose={() => setEditingGoal(null)}
-                    onUpdate={(updated) => {
-                        setGoals(prev => prev.map(g => g.id === updated.id ? updated : g));
-                        setEditingGoal(null);
-                    }}
-                    onDelete={(id) => {
-                        setGoals(prev => prev.filter(g => g.id !== id));
-                        setEditingGoal(null);
-                    }}
+                    onUpdate={handleUpdate}
+                    onDelete={handleDelete}
                 />
             )}
 
@@ -196,7 +258,7 @@ function AddGoalForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, a: s
     return (
         <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center">
-                <h2 className="text-lg font-bold text-stone-900">New Future Expense</h2>
+                <h2 className="text-lg font-bold text-stone-900">New Money Goal</h2>
                 <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
                     <X size={20} />
                 </button>
@@ -204,7 +266,7 @@ function AddGoalForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, a: s
 
             <div className="space-y-4">
                 <div className="space-y-2">
-                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Expense Name</label>
+                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Goal Name</label>
                     <input
                         type="text" placeholder="e.g. Visa Renewal"
                         autoFocus
@@ -241,7 +303,7 @@ function AddGoalForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, a: s
     )
 }
 
-function EditGoalSheet({ goal, onClose, onUpdate, onDelete }: { goal: SavingsGoal, onClose: () => void, onUpdate: (g: SavingsGoal) => void, onDelete: (id: string) => void }) {
+function EditGoalSheet({ goal, onClose, onUpdate, onDelete }: { goal: any, onClose: () => void, onUpdate: (g: any) => void, onDelete: (id: string) => void }) {
     const [name, setName] = useState(goal.name);
     const [amount, setAmount] = useState(goal.target_amount.toString());
     const [date, setDate] = useState(goal.target_date);
@@ -269,7 +331,7 @@ function EditGoalSheet({ goal, onClose, onUpdate, onDelete }: { goal: SavingsGoa
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
                 <div className="flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-stone-900">Edit Future Expense</h2>
+                    <h2 className="text-lg font-bold text-stone-900">Edit Money Goal</h2>
                     <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
                         <X size={20} />
                     </button>
@@ -277,7 +339,7 @@ function EditGoalSheet({ goal, onClose, onUpdate, onDelete }: { goal: SavingsGoa
 
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Expense Name</label>
+                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Goal Name</label>
                         <input
                             type="text" value={name} onChange={e => setName(e.target.value)}
                             className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
@@ -320,7 +382,7 @@ function EditGoalSheet({ goal, onClose, onUpdate, onDelete }: { goal: SavingsGoa
     );
 }
 
-function ContributeForm({ goal, onContribute, onClose, isSubmitting }: { goal: SavingsGoal, onContribute: (a: string) => void, onClose: () => void, isSubmitting: boolean }) {
+function ContributeForm({ goal, onContribute, onClose, isSubmitting }: { goal: any, onContribute: (a: string) => void, onClose: () => void, isSubmitting: boolean }) {
     const [amount, setAmount] = useState("");
 
     return (

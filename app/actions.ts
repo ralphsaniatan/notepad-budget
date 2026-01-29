@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
+import { unstable_noStore as noStore } from "next/cache";
 
 // Type definitions matching our schema
 type DashboardData = {
@@ -25,6 +26,7 @@ const DEFAULT_DASHBOARD: DashboardData = {
 };
 
 export async function getDashboardData(targetDate?: string): Promise<DashboardData> {
+    noStore(); // Disable all caching for this data
     const supabase = await createClient();
 
     try {
@@ -446,18 +448,21 @@ export async function addDebt(name: string, balance: number, rate: number) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false };
 
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from('debts')
         .insert({
             user_id: user.id,
             name,
             total_balance: balance,
             interest_rate: rate
-        });
+        })
+        .select()
+        .single();
 
     if (error) console.error("Add Debt Error:", error);
     revalidatePath('/', 'layout');
-    return { success: !error };
+    revalidatePath('/debts');
+    return { success: !error, id: data?.id };
 }
 
 export async function addCategory(
@@ -751,4 +756,32 @@ export async function deleteDebt(id: string) {
     revalidatePath('/', 'layout');
     revalidatePath('/debts');
     return { success: true };
+}
+// --- Sync / Seeding Actions ---
+
+export async function getAllUserData() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    // Get Months (for context)
+    const { data: months } = await supabase.from('months').select('*').eq('user_id', user.id);
+
+    // Get Components
+    const { data: transactions } = await supabase.from('transactions').select('*').eq('user_id', user.id);
+    const { data: categories } = await supabase.from('categories').select('*').eq('user_id', user.id);
+    const { data: debts } = await supabase.from('debts').select('*').eq('user_id', user.id);
+    const { data: savings_goals } = await supabase.from('savings_goals').select('*').eq('user_id', user.id);
+
+    return {
+        success: true,
+        data: {
+            user_id: user.id,
+            transactions: transactions || [],
+            categories: categories || [],
+            debts: debts || [],
+            savings_goals: savings_goals || [],
+            months: months || []
+        }
+    };
 }

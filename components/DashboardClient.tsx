@@ -3,49 +3,40 @@
 import { useState, useEffect } from "react";
 import { signOut } from "@/app/auth/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { getTransactions } from "@/app/actions";
 import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
-import { Info, X, LogOut } from "lucide-react";
+import { Info, LogOut } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
-import { addTransaction, closeMonth } from "@/app/actions";
+import { closeMonth } from "@/app/actions";
 import { Spinner } from "@/components/ui/Spinner";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
+import { addTransaction } from "@/app/actions";
 
 type DashboardData = {
-    safeToSpend: number;
-    spent: number;
-    debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
-    recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string, category_id?: string, debt_id?: string }[];
-    categories: { id: string, name: string }[];
-    breakdown?: { income: number, rollover: number, commitments: number, spent: number };
-    userId?: string;
-    email?: string;
+    // Legacy props structure - used for default/context
+    initialData?: any;
 };
 
 type TxType = 'expense' | 'income' | 'debt_payment';
 
-
-
-export function DashboardClient({ initialData }: { initialData: DashboardData }) {
-    const [data, setData] = useState(initialData);
+export function DashboardClient({ initialData }: DashboardData) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingTx, setEditingTx] = useState<any>(null);
     const [showBreakdown, setShowBreakdown] = useState(false);
 
-    // Pagination State
-    const [transactions, setTransactions] = useState(initialData.recentTransactions);
-    const [offset, setOffset] = useState(10);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
+    // Live Query for Data
+    const transactions = useLiveQuery(() => db.transactions.orderBy('date').reverse().toArray()) || [];
+    const categories = useLiveQuery(() => db.categories.toArray()) || [];
+    const debts = useLiveQuery(() => db.debts.toArray()) || [];
+
+    // Pagination State (Client-side slicing of local data)
+    const [limit, setLimit] = useState(10);
 
     // Date Logic
-    // Use the date from the first transaction or today if empty vs URL param... 
-    // Actually simpler: we can infer the "Viewed Month" from the passed-in props? 
-    // But for now let's just use url param or today.
-    // Ideally passed from server, but we can reconstruct from query params if we had them.
-    // Let's rely on a client-side parsed date for the header display.
     const [currentDate, setCurrentDate] = useState(new Date());
 
     useEffect(() => {
@@ -53,50 +44,59 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         const m = params.get('month');
         if (m) setCurrentDate(new Date(m));
         else setCurrentDate(new Date());
-
-        setData(initialData);
-    }, [initialData]);
+    }, []);
 
     const changeMonth = (offset: number) => {
         const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
         const isoParams = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}-01`;
-        window.location.href = `/?month=${isoParams}`; // Standard nav to refresh server data
+        window.location.href = `/?month=${isoParams}`;
     };
 
-    // Sync if initialData changes (e.g. month change)
-    useEffect(() => {
-        setTransactions(initialData.recentTransactions);
-        setOffset(10);
-        setHasMore(true);
-    }, [initialData]);
-
-    const handleLoadMore = async () => {
-        setIsLoadingMore(true);
-        try {
-            const isoMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
-            const more = await getTransactions(offset, 10, isoMonth);
-
-            if (more.length < 10) setHasMore(false);
-            setTransactions(prev => [...prev, ...more]);
-            setOffset(prev => prev + 10);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsLoadingMore(false);
-        }
+    const handleLoadMore = () => {
+        setLimit(prev => prev + 10);
     };
 
     const currentMonthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const isFuture = false; // logic placeholder
+    const isoMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // Check if we are viewing the *real* current month to allow closing
-    const realNow = new Date();
-    const isCurrentRealMonth = realNow.getMonth() === currentDate.getMonth() && realNow.getFullYear() === currentDate.getFullYear();
+    // --- Calculations (Client Side) ---
+    // Filter transactions by month
+    const currentMonthTransactions = transactions.filter(t => t.date.startsWith(isoMonthStr.substring(0, 7)));
 
-    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-    // Only allow closing if it's the *Current Real Month* and it's over, OR if we are looking at a past active month? 
-    // Actually "Close Month" button should probably only appear if we are on the current active month.
-    const canClose = isCurrentRealMonth && realNow.getDate() >= daysInMonth;
+    let safeToSpend = 0;
+    let spent = 0;
+    let income = 0;
+    let rollover = 0;
+
+    const breakdown = { income: 0, rollover: 0, commitments: 0, spent: 0 };
+
+    // Use Server Data for "Base" values (Rollover) if available
+    if (initialData?.breakdown) {
+        rollover = initialData.breakdown.rollover;
+        breakdown.rollover = rollover;
+    }
+
+    // Calculate Totals from Live Local Data
+    // We need committed categories for "Safe to Spend"
+    const committedCategories = categories.filter(c => c.type === 'fixed' || c.budget_limit > 0);
+    const totalCommitments = committedCategories.reduce((acc, c) => acc + Number(c.budget_limit), 0);
+    breakdown.commitments = totalCommitments;
+
+    currentMonthTransactions.forEach(tx => {
+        const amt = Number(tx.amount);
+        if (tx.type === 'income') {
+            income += amt;
+            breakdown.income += amt;
+        } else {
+            spent += amt;
+            breakdown.spent += amt;
+        }
+    });
+
+    safeToSpend = (income + rollover) - totalCommitments - spent;
+
+    // Disable closing for now in Local Mode until we build full month-management logic logic
+    const canClose = false;
 
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
@@ -107,49 +107,33 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         if (isNaN(amount) || amount <= 0) return;
 
         setIsSubmitting(true);
-
-        // Determine Type-Specific IDs
-        const categoryId = type !== 'debt_payment' ? targetId : undefined;
-        const debtId = type === 'debt_payment' ? targetId : undefined;
-
-        // Optimistic Update
-        const newTx = {
-            id: Math.random().toString(), // Temp ID
-            description: description || (type === 'income' ? 'Income' : type === 'debt_payment' ? 'Debt Payment' : 'Expense'),
-            amount,
-            type,
-            date: new Date().toISOString(),
-            category_name: type === 'debt_payment'
-                ? `To: ${data.debts.find(d => d.id === debtId)?.name}`
-                : data.categories.find(c => c.id === categoryId)?.name,
-            category_id: categoryId,
-            debt_id: debtId
-        };
-
-        const newData = { ...data };
-        if (type === 'expense') {
-            newData.safeToSpend -= amount;
-            newData.spent += amount;
-            if (newData.breakdown) newData.breakdown.spent += amount;
-        } else if (type === 'income') {
-            newData.safeToSpend += amount;
-            if (newData.breakdown) newData.breakdown.income += amount;
-        } else if (type === 'debt_payment') {
-            newData.safeToSpend -= amount;
-            newData.spent += amount;
-            if (newData.breakdown) newData.breakdown.spent += amount;
-            if (debtId) {
-                newData.debts = newData.debts.map(d => d.id === debtId ? { ...d, total_balance: Math.max(0, Number(d.total_balance) - amount) } : d);
-            }
-        }
-        newData.recentTransactions = [newTx, ...newData.recentTransactions];
-
-        setData(newData);
-
         try {
-            await addTransaction(amount, description || "", type, categoryId, debtId);
+            // 1. Write to Local DB Immediately
+            const newTx = {
+                id: crypto.randomUUID(),
+                description: description || (type === 'income' ? 'Income' : type === 'debt_payment' ? 'Debt Payment' : 'Expense'),
+                amount,
+                type,
+                date: new Date().toISOString(),
+                category_id: type !== 'debt_payment' ? targetId : undefined,
+                debt_id: type === 'debt_payment' ? targetId : undefined,
+                user_id: 'unknown',
+                created_at: new Date().toISOString(),
+                sync_status: 'created' as const
+            };
+
+            await db.transactions.add(newTx);
+
+            // 2. Trigger Server Action (Hybrid Sync)
+            await addTransaction(amount, description || "", type, targetId, targetId);
+
+            toast.success("Transaction Added", {
+                description: `${description || (type === 'income' ? 'Income' : 'Expense')} for ${currency(amount)} logged.`
+            });
+
         } catch (err) {
             console.error(err);
+            toast.error("Failed to save transaction");
         } finally {
             setIsSubmitting(false);
         }
@@ -161,23 +145,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const onTouchStart = (e: React.TouchEvent) => {
-        if (window.scrollY === 0) {
-            setTouchStart(e.touches[0].clientY);
-        }
+        if (window.scrollY === 0) setTouchStart(e.touches[0].clientY);
     };
 
     const onTouchMove = (e: React.TouchEvent) => {
-        // Only track if we started at top and are pulling down
         if (touchStart === 0 || window.scrollY > 0) return;
-
-        const currentTouch = e.touches[0].clientY;
-        const diff = currentTouch - touchStart;
-
-        // Dampen the pull
-        if (diff > 0) {
-            setPullChange(diff * 0.4);
-            // Prevent default to stop native overscroll in some browsers (optional, careful with scroll)
-        }
+        const diff = e.touches[0].clientY - touchStart;
+        if (diff > 0) setPullChange(diff * 0.4);
     };
 
     const onTouchEnd = () => {
@@ -191,23 +165,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     };
 
     const handleCloseMonth = async () => {
-        if (!confirm("Are you sure? This will Archive the current month and start fresh.")) return;
-
-        setIsSubmitting(true);
-        try {
-            const res = await closeMonth();
-            if (res.success) {
-                alert("Month Closed Successfully!");
-                window.location.reload();
-            } else {
-                alert("Error: " + res.error);
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setIsSubmitting(false);
-        }
+        // Placeholder
+        alert("Closing month must be done online for now.");
     };
+
+    const displayTransactions = transactions.slice(0, limit);
 
     return (
         <>
@@ -230,7 +192,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
                 {/* App Header */}
                 <header className="flex justify-between items-center mt-4">
-                    <h1 className="font-bold text-stone-900 tracking-tight text-xl">Notepad Budget</h1>
+                    <img src="/logo.png" alt="NB" className="w-10 h-10" />
                     <div className="flex items-center gap-2">
                         <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1 transition-transform active:scale-75">&larr;</button>
                         <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
@@ -255,18 +217,18 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                             <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
                                 Safe to Spend
                             </span>
-                            <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", data.safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
+                            <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
                                 <span className="text-xl md:text-2xl opacity-60">AED</span>
                                 <span className="text-5xl md:text-6xl">
-                                    {data.safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                             </div>
-                            {data.spent > 0 && <div className="mt-4 bg-red-100 border border-red-200 text-red-700 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(data.spent)}</div>}
+                            {spent > 0 && <div className="mt-4 bg-red-100 border border-red-200 text-red-700 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(spent)}</div>}
                         </div>
                     </PaperCard>
                 </section>
 
-                {/* Tracked Budgets (Envelopes) */}
+                {/* Tracked Budgets */}
                 <div className="mt-8">
                     <TrackedBudgetList />
                 </div>
@@ -282,39 +244,43 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
                     <div className="relative">
                         <div className="space-y-2">
-                            {transactions.length === 0 ? (
+                            {displayTransactions.length === 0 ? (
                                 <p className="text-stone-300 text-sm p-8 text-center italic border-2 border-dashed border-stone-200 rounded-xl">
                                     No transactions yet.<br /><span className="text-xs">Tap + to add one.</span>
                                 </p>
                             ) : (
                                 <>
-                                    {transactions.map(tx => (
-                                        <div
-                                            key={tx.id}
-                                            onClick={() => setEditingTx(tx)}
-                                            className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
-                                        >
-                                            <div>
-                                                <div className="font-bold text-stone-800 text-sm capitalize">{tx.description}</div>
-                                                <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
-                                                    <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                                    {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
-                                                    {tx.category_name && tx.type !== 'debt_payment' ? <span className="text-stone-300">• {tx.category_name}</span> : ''}
+                                    {displayTransactions.map((tx) => {
+                                        // Enrich Category Name
+                                        const catName = categories.find(c => c.id === tx.category_id)?.name;
+
+                                        return (
+                                            <div
+                                                key={tx.id}
+                                                onClick={() => setEditingTx(tx)}
+                                                className="flex justify-between items-center p-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors rounded-lg cursor-pointer active:bg-stone-100"
+                                            >
+                                                <div>
+                                                    <div className="font-bold text-stone-800 text-sm capitalize">{tx.description}</div>
+                                                    <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
+                                                        <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                                        {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
+                                                        {catName && tx.type !== 'debt_payment' ? <span className="text-stone-300">• {catName}</span> : ''}
+                                                    </div>
+                                                </div>
+                                                <div className={clsx("font-mono font-bold text-sm", tx.type === 'income' ? "text-green-600" : "text-stone-900")}>
+                                                    {tx.type === 'income' ? '+' : '-'}{currency(Number(tx.amount))}
                                                 </div>
                                             </div>
-                                            <div className={clsx("font-mono font-bold text-sm", tx.type === 'income' ? "text-green-600" : "text-stone-900")}>
-                                                {tx.type === 'income' ? '+' : '-'}{currency(tx.amount)}
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
 
-                                    {hasMore && (
+                                    {transactions.length > limit && (
                                         <button
                                             onClick={handleLoadMore}
-                                            disabled={isLoadingMore}
                                             className="w-full py-3 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-lg transition-colors border border-dashed border-stone-200 flex items-center justify-center gap-2 active:scale-98"
                                         >
-                                            {isLoadingMore ? <><Spinner /> Loading...</> : "Load More"}
+                                            Load More
                                         </button>
                                     )}
                                 </>
@@ -323,59 +289,53 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     </div>
                 </section>
 
-                {/* Savings & Debts Links */}
+                {/* Savings & Debts Links - Sticky Note Style */}
                 <section className="pt-4 border-t border-stone-200 border-dashed grid grid-cols-2 gap-4">
                     <Link href="/savings">
-                        <PaperCard className="bg-stone-50 hover:bg-white transition-all border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3 active:scale-95">
-                            <div className="flex flex-col justify-between h-full min-h-[100px]">
-                                <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Future Expenses</h3>
-                                <div className="text-lg font-bold text-stone-800 flex items-center gap-1">
-                                    Planning &rarr;
-                                </div>
+                        <div className="relative bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-400 rounded-r-xl shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-95 p-4 h-full min-h-[100px]">
+                            {/* Washi tape effect */}
+                            <div className="absolute -top-1 left-4 w-8 h-3 bg-amber-300/70 rounded-sm transform -rotate-2"></div>
+                            <h3 className="text-amber-700 text-[10px] uppercase font-bold tracking-widest mb-2">Money Goals</h3>
+                            <div className="text-lg font-bold text-amber-900 flex items-center gap-1">
+                                Planning &rarr;
                             </div>
-                        </PaperCard>
+                        </div>
                     </Link>
 
                     <Link href="/debts">
-                        <PaperCard className="bg-stone-50 hover:bg-white transition-all border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3 active:scale-95">
-                            <div className="flex flex-col justify-between h-full min-h-[100px]">
-                                <div>
-                                    <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total Debt</h3>
-                                </div>
-                                <div className="text-lg font-mono font-bold text-stone-800 break-all leading-tight">
-                                    <span className="text-xs mr-1 opacity-60">AED</span>
-                                    {data.debts.reduce((acc, d) => acc + Number(d.total_balance), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
+                        <div className="relative bg-rose-50 hover:bg-rose-100 border-l-4 border-rose-400 rounded-r-xl shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-95 p-4 h-full min-h-[100px]">
+                            {/* Washi tape effect */}
+                            <div className="absolute -top-1 left-4 w-8 h-3 bg-rose-300/70 rounded-sm transform rotate-2"></div>
+                            <h3 className="text-rose-700 text-[10px] uppercase font-bold tracking-widest mb-2">Total Debt</h3>
+                            <div className="text-lg font-mono font-bold text-rose-900 break-all leading-tight">
+                                <span className="text-xs mr-1 opacity-60">AED</span>
+                                {debts.reduce((acc, d) => acc + Number(d.total_balance), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
-                        </PaperCard>
+                        </div>
                     </Link>
                 </section>
 
-                {/* Footer / Rollover - Only Show if End of Month */}
-                {canClose && (
-                    <section className="pt-8 opacity-70 hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={handleCloseMonth}
-                            disabled={isSubmitting}
-                            className="w-full py-4 border-2 border-stone-200 text-xs text-stone-500 font-bold uppercase tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50 rounded-xl active:scale-95 flex items-center justify-center gap-2"
-                        >
-                            {isSubmitting ? <><Spinner /> Closing...</> : "Close & Roll Over to Next Month"}
-                        </button>
-                    </section>
-                )}
-
-                {/* Debug Footer */}
+                {/* Footer / Log Out */}
                 <footer className="text-center py-8 space-y-4">
                     <button
-                        onClick={() => signOut()}
+                        onClick={async () => {
+                            // Clear local Dexie database (important for guest users)
+                            await db.transactions.clear();
+                            await db.categories.clear();
+                            await db.debts.clear();
+                            await db.savings_goals.clear();
+                            // Then sign out (server-side cleanup for guests)
+                            signOut();
+                        }}
                         className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95"
                     >
                         <LogOut size={14} /> Log Out
                     </button>
 
                     <div className="text-[10px] text-stone-300 font-mono select-all">
-                        {data.email} <br />
-                        UID: {data.userId?.slice(-4) || '----'} | v1.22.3
+                        {/* {data.email} <br />
+                        UID: {data.userId?.slice(-4) || '----'} | v1.22.3 */}
+                        v1.22.3
                     </div>
                 </footer>
 
@@ -383,27 +343,27 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
             {/* Persistent Mobile Add Bar */}
             <MobileAddBar
-                categories={data.categories}
-                debts={data.debts.filter(d => d.total_balance > 0)}
+                categories={categories}
+                debts={debts.filter(d => d.total_balance > 0)}
                 onAdd={handleQuickAdd}
                 isSubmitting={isSubmitting}
             />
 
-            {/* Edit Sheet */}
+            {/* Edit Sheet (Placeholder) */}
             {
                 editingTx && (
                     <EditTransactionSheet
                         transaction={editingTx}
-                        categories={data.categories}
-                        debts={data.debts.filter(d => d.total_balance > 0)}
+                        categories={categories}
+                        debts={debts.filter(d => d.total_balance > 0)}
                         onClose={() => setEditingTx(null)}
                     />
                 )
             }
 
-            {/* Breakdown Popover (Replaces Fixed Modal) */}
+            {/* Breakdown Popover */}
             {
-                showBreakdown && data.breakdown && (
+                showBreakdown && breakdown && (
                     <div
                         onClick={() => setShowBreakdown(false)}
                         className="fixed inset-0 z-40 bg-transparent cursor-default"
@@ -414,7 +374,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             }
 
             {
-                showBreakdown && data.breakdown && (
+                showBreakdown && breakdown && (
                     <div className="fixed top-24 left-1/2 -translate-x-1/2 w-11/12 max-w-sm z-50 animate-in fade-in zoom-in duration-200 shadow-2xl rounded-2xl overflow-hidden ring-4 ring-stone-900/5">
                         <div className="bg-white p-6 space-y-4 text-stone-900">
                             <div className="flex justify-between items-center mb-2">
@@ -424,26 +384,22 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                             <div className="space-y-2 font-mono text-sm">
                                 <div className="flex justify-between">
                                     <span className="text-stone-500">Income</span>
-                                    <span className="font-bold text-green-600">+{currency(data.breakdown.income)}</span>
+                                    <span className="font-bold text-green-600">+{currency(breakdown.income)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-stone-500">Rollover</span>
-                                    <span className={clsx("font-bold", data.breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
-                                        {data.breakdown.rollover >= 0 ? '+' : ''}{currency(data.breakdown.rollover)}
+                                    <span className={clsx("font-bold", breakdown.rollover >= 0 ? "text-green-600" : "text-red-600")}>
+                                        {breakdown.rollover >= 0 ? '+' : ''}{currency(breakdown.rollover)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-stone-500">Fixed Bills</span>
-                                    <span className="font-bold text-stone-700">-{currency(data.breakdown.commitments)}</span>
+                                    <span className="font-bold text-stone-700">-{currency(breakdown.commitments)}</span>
                                 </div>
                                 <div className="flex justify-between pt-2 border-t border-stone-100">
                                     <span className="text-stone-500">Spent</span>
-                                    <span className="font-bold text-red-600">-{currency(data.breakdown.spent)}</span>
+                                    <span className="font-bold text-red-600">-{currency(breakdown.spent)}</span>
                                 </div>
-                            </div>
-
-                            <div className="pt-3 border-t-2 border-stone-900 lg:hidden text-center">
-                                <div className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">Tap anywhere to close</div>
                             </div>
                         </div>
                     </div>

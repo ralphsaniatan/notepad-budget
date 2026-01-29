@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { SyncManager } from "@/components/SyncManager";
+import { Toaster } from "sonner";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -31,7 +33,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased bg-stone-50 text-stone-900`}
       >
+        <SyncManager />
         {children}
+        <Toaster position="top-center" />
       </body>
     </html>
   );

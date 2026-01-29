@@ -1,32 +1,64 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getTrackedBudgets, TrackedBudget } from "@/app/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
+import { useState, useEffect } from "react";
 
 export function TrackedBudgetList() {
-    const [budgets, setBudgets] = useState<TrackedBudget[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    // 1. Get Pinned Categories
+    const categories = useLiveQuery(() =>
+        db.categories.filter(c => c.is_pinned === true).toArray()
+    );
+
+    // 2. Get Transactions for Current Month to calculate spending
+    // We need current month context. For MVP, we use "Actual Current Month".
+    // If we want to support "viewing past months" this needs to accept a date prop.
+    // Let's assume global current month behavior for now or infer from URL?
+    // Dashboard passes date context usually, but this component is standalone?
+    // Let's assume "Current Real Month" for budgets? No, budgets should follow the view.
+    // But `TrackedBudgetList` is currently inside Dashboard, inside a date context.
+    // Ideally we pass `monthIso` as a prop. But to keep refactor simple, let's use URL or Today.
+
+    const [currentDate, setCurrentDate] = useState(new Date());
 
     useEffect(() => {
-        async function load() {
-            try {
-                const data = await getTrackedBudgets();
-                setBudgets(data);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        load();
-
-        // Subscribe to changes? 
-        // For MVP, simple load is fine.
+        const params = new URLSearchParams(window.location.search);
+        const m = params.get('month');
+        if (m) setCurrentDate(new Date(m));
     }, []);
 
-    if (isLoading) return <div className="h-24 animate-pulse bg-stone-100 rounded-xl mb-6"></div>;
-    if (budgets.length === 0) return null;
+    const isoMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const transactions = useLiveQuery(() =>
+        db.transactions.filter(t => t.date.startsWith(isoMonthStr.substring(0, 7))).toArray()
+    );
+
+    if (!categories || !transactions) return <div className="h-24 animate-pulse bg-stone-100 rounded-xl mb-6"></div>;
+    if (categories.length === 0) return null;
+
+    // 3. Calculate Logic
+    const budgets = categories.map(cat => {
+        const spent = transactions
+            .filter(t => t.category_id === cat.id && (t.type === 'expense' || t.type === 'debt_payment')) // Budgets track outflows
+            .reduce((sum, t) => sum + Number(t.amount), 0);
+
+        const limit = Number(cat.budget_limit);
+        const remaining = limit - spent;
+        const percent = limit > 0 ? (spent / limit) * 100 : 0;
+
+        let status: 'ok' | 'warning' | 'over' = 'ok';
+        if (remaining < 0) status = 'over';
+        else if (percent > 85) status = 'warning';
+
+        return {
+            ...cat,
+            spent,
+            remaining,
+            percent,
+            status
+        };
+    });
 
     return (
         <section className="mb-8">
@@ -41,7 +73,7 @@ export function TrackedBudgetList() {
                                     <span className={getStatusColor(b.status)}>
                                         AED {Math.abs(b.remaining).toFixed(0)}
                                     </span>
-                                    <span className="text-stone-300"> / {b.limit}</span>
+                                    <span className="text-stone-300"> / {b.budget_limit}</span>
                                     <span className="ml-1 text-[10px] uppercase text-stone-400 tracking-wider">
                                         {b.status === 'over' ? 'Over' : 'Left'}
                                     </span>
@@ -63,13 +95,13 @@ export function TrackedBudgetList() {
     );
 }
 
-function getStatusColor(status: TrackedBudget['status']) {
+function getStatusColor(status: 'ok' | 'warning' | 'over') {
     if (status === 'over') return "text-red-600";
     if (status === 'warning') return "text-yellow-600";
     return "text-green-600";
 }
 
-function getProgressBarColor(status: TrackedBudget['status'], percent: number) {
+function getProgressBarColor(status: 'ok' | 'warning' | 'over', percent: number) {
     if (status === 'over') return "bg-red-500";
     if (percent > 85) return "bg-yellow-500";
     return "bg-green-500";
