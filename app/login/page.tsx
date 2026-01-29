@@ -2,7 +2,7 @@
 
 import { signIn, signUp, loginAsGuest } from "@/app/auth/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { Lock, ArrowRight, User, Plus, LogIn, Sparkles, X, UserPlus, ChevronLeft } from "lucide-react";
+import { Lock, ArrowRight, User, Plus, LogIn, Sparkles, X, UserPlus, ChevronLeft, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import clsx from "clsx";
 
@@ -199,8 +199,17 @@ export default function LoginPage() {
                     disabled={loading}
                     className="w-full bg-stone-900 text-stone-50 py-4 rounded-xl text-sm font-bold hover:bg-black transition-all flex justify-center items-center gap-2 group disabled:opacity-50 shadow-lg"
                 >
-                    {loading ? "Crunching..." : (view === 'SIGNUP' ? "Create Account" : "Access Budget")}
-                    {!loading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
+                    {loading ? (
+                        <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Crunching...
+                        </>
+                    ) : (
+                        <>
+                            {view === 'SIGNUP' ? "Create Account" : "Access Budget"}
+                            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </>
+                    )}
                 </button>
             </form>
 

@@ -332,12 +332,8 @@ export function DashboardClient({ initialData }: DashboardData) {
                                 setShowLogoutModal(true);
                             } else {
                                 // No pending items - logout immediately
-                                await Promise.all([
-                                    db.transactions.clear(),
-                                    db.categories.clear(),
-                                    db.debts.clear(),
-                                    db.savings_goals.clear()
-                                ]);
+                                // DON'T clear local DB for registered users - it's a cache that reseeds on login
+                                // Server-side signOut handles guest data cleanup
                                 signOut();
                             }
                         }}
@@ -380,12 +376,7 @@ export function DashboardClient({ initialData }: DashboardData) {
                                 </button>
                                 <button
                                     onClick={async () => {
-                                        await Promise.all([
-                                            db.transactions.clear(),
-                                            db.categories.clear(),
-                                            db.debts.clear(),
-                                            db.savings_goals.clear()
-                                        ]);
+                                        // Only for unsynced data warning - don't clear, just logout
                                         signOut();
                                     }}
                                     className="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors"
