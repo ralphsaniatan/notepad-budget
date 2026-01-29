@@ -319,12 +319,15 @@ export function DashboardClient({ initialData }: DashboardData) {
                 <footer className="text-center py-8 space-y-4">
                     <button
                         onClick={async () => {
-                            // Clear local Dexie database (important for guest users)
-                            await db.transactions.clear();
-                            await db.categories.clear();
-                            await db.debts.clear();
-                            await db.savings_goals.clear();
-                            // Then sign out (server-side cleanup for guests)
+                            // Clear local Dexie cache (for ALL users - this is just cached data that will resync)
+                            // Server-side signOut handles actual data deletion for guests only
+                            await Promise.all([
+                                db.transactions.clear(),
+                                db.categories.clear(),
+                                db.debts.clear(),
+                                db.savings_goals.clear()
+                            ]);
+                            // signOut is a server action that redirects, no need to await
                             signOut();
                         }}
                         className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95"
