@@ -18,8 +18,9 @@ export function SyncManager() {
         const debtCount = await db.debts.where('sync_status').anyOf(['created', 'updated']).count();
         const total = txCount + catCount + debtCount;
         setPendingCount(total);
-        setShowIndicator(total > 0 || isSyncing);
-    }, [isSyncing]);
+        // Only show indicator when there's something to show (offline, syncing, or pending)
+        // Hide when online with nothing pending
+    }, []);
 
     // Initial Seed from Server
     useEffect(() => {
@@ -139,18 +140,16 @@ export function SyncManager() {
         updatePendingCount();
     }, [updatePendingCount]);
 
-    // Don't render if nothing to show
-    if (!showIndicator && isOnline) return null;
+    // Don't render if online with nothing pending and not syncing
+    if (isOnline && pendingCount === 0 && !isSyncing) return null;
 
     return (
         <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
             <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${!isOnline
-                    ? "bg-amber-100 text-amber-800 border border-amber-300"
-                    : isSyncing
-                        ? "bg-blue-100 text-blue-800 border border-blue-300"
-                        : pendingCount > 0
-                            ? "bg-orange-100 text-orange-800 border border-orange-300"
-                            : "bg-green-100 text-green-800 border border-green-300"
+                ? "bg-amber-100 text-amber-800 border border-amber-300"
+                : isSyncing
+                    ? "bg-blue-100 text-blue-800 border border-blue-300"
+                    : "bg-orange-100 text-orange-800 border border-orange-300"
                 }`}>
                 {!isOnline ? (
                     <>
@@ -163,15 +162,10 @@ export function SyncManager() {
                         <RefreshCw size={14} className="animate-spin" />
                         <span>Syncing...</span>
                     </>
-                ) : pendingCount > 0 ? (
-                    <>
-                        <Cloud size={14} />
-                        <span>{pendingCount} pending</span>
-                    </>
                 ) : (
                     <>
                         <Cloud size={14} />
-                        <span>Synced</span>
+                        <span>{pendingCount} pending</span>
                     </>
                 )}
             </div>
