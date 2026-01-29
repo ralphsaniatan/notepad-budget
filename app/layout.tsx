@@ -29,6 +29,11 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#ffffff" />
+        {/* Apple-specific PWA tags */}
+        <link rel="apple-touch-icon" href="/icon-512.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Notepad" />
       </head>
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased bg-stone-50 text-stone-900`}

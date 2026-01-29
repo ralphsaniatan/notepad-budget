@@ -22,23 +22,48 @@ export function SyncManager() {
         // Hide when online with nothing pending
     }, []);
 
-    // Initial Seed from Server
+    // Initial Seed from Server - runs when local DB is empty
     useEffect(() => {
         async function seed() {
-            const count = await db.transactions.count();
-            if (count > 0) return; // Already seeded
+            // Check if local DB is empty (check all tables)
+            const txCount = await db.transactions.count();
+            const catCount = await db.categories.count();
 
+            // If we have transactions and categories, assume seeded
+            if (txCount > 0 && catCount > 0) {
+                console.log("SyncManager: Local DB already has data, skipping seed");
+                return;
+            }
+
+            console.log("SyncManager: Local DB is empty, seeding from server...");
             setIsSyncing(true);
+
             try {
                 const res = await getAllUserData();
                 if (res.success && res.data) {
+                    // Clear existing to avoid duplicates then add
                     await db.transaction('rw', db.transactions, db.categories, db.debts, db.savings_goals, async () => {
-                        await db.transactions.bulkAdd(res.data.transactions.map((t: any) => ({ ...t, sync_status: 'synced' })));
-                        await db.categories.bulkAdd(res.data.categories.map((c: any) => ({ ...c, sync_status: 'synced' })));
-                        await db.debts.bulkAdd(res.data.debts.map((d: any) => ({ ...d, sync_status: 'synced' })));
-                        await db.savings_goals.bulkAdd(res.data.savings_goals.map((s: any) => ({ ...s, sync_status: 'synced' })));
+                        await db.transactions.clear();
+                        await db.categories.clear();
+                        await db.debts.clear();
+                        await db.savings_goals.clear();
+
+                        if (res.data.transactions?.length) {
+                            await db.transactions.bulkAdd(res.data.transactions.map((t: any) => ({ ...t, sync_status: 'synced' })));
+                        }
+                        if (res.data.categories?.length) {
+                            await db.categories.bulkAdd(res.data.categories.map((c: any) => ({ ...c, sync_status: 'synced' })));
+                        }
+                        if (res.data.debts?.length) {
+                            await db.debts.bulkAdd(res.data.debts.map((d: any) => ({ ...d, sync_status: 'synced' })));
+                        }
+                        if (res.data.savings_goals?.length) {
+                            await db.savings_goals.bulkAdd(res.data.savings_goals.map((s: any) => ({ ...s, sync_status: 'synced' })));
+                        }
                     });
-                    console.log("SyncManager: Initial seed complete");
+                    console.log("SyncManager: Seed complete -", res.data.transactions?.length, "transactions,", res.data.categories?.length, "categories");
+                } else {
+                    console.log("SyncManager: No data returned from server");
                 }
             } catch (e) {
                 console.error("SyncManager: Seed failed", e);
@@ -48,7 +73,7 @@ export function SyncManager() {
             }
         }
         seed();
-    }, [updatePendingCount]);
+    }, []); // Empty deps - only run on mount
 
     // Push pending changes to server
     const pushChanges = useCallback(async () => {
