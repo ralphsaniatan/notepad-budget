@@ -1,16 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getAllUserData } from "@/app/actions"; // Server Action
+import { useEffect, useState, useCallback } from "react";
+import { getAllUserData, addTransaction, addCategory, addDebt } from "@/app/actions";
 import { db } from "@/lib/db";
-import { useLiveQuery } from "dexie-react-hooks";
-// For now, let's use a simple console log or custom visual indicator if needed.
+import { Cloud, CloudOff, RefreshCw } from "lucide-react";
 
 export function SyncManager() {
+    const [isOnline, setIsOnline] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
-    const [lastSync, setLastSync] = useState<Date | null>(null);
+    const [pendingCount, setPendingCount] = useState(0);
+    const [showIndicator, setShowIndicator] = useState(false);
 
-    // Initial Seed
+    // Check pending items count
+    const updatePendingCount = useCallback(async () => {
+        const txCount = await db.transactions.where('sync_status').anyOf(['created', 'updated']).count();
+        const catCount = await db.categories.where('sync_status').anyOf(['created', 'updated']).count();
+        const debtCount = await db.debts.where('sync_status').anyOf(['created', 'updated']).count();
+        const total = txCount + catCount + debtCount;
+        setPendingCount(total);
+        setShowIndicator(total > 0 || isSyncing);
+    }, [isSyncing]);
+
+    // Initial Seed from Server
     useEffect(() => {
         async function seed() {
             const count = await db.transactions.count();
@@ -21,80 +32,149 @@ export function SyncManager() {
                 const res = await getAllUserData();
                 if (res.success && res.data) {
                     await db.transaction('rw', db.transactions, db.categories, db.debts, db.savings_goals, async () => {
-                        // Clear all first to be safe if partial seed happened? No, let's trust count check.
-
-                        // Map and Bulk Add
                         await db.transactions.bulkAdd(res.data.transactions.map((t: any) => ({ ...t, sync_status: 'synced' })));
                         await db.categories.bulkAdd(res.data.categories.map((c: any) => ({ ...c, sync_status: 'synced' })));
                         await db.debts.bulkAdd(res.data.debts.map((d: any) => ({ ...d, sync_status: 'synced' })));
                         await db.savings_goals.bulkAdd(res.data.savings_goals.map((s: any) => ({ ...s, sync_status: 'synced' })));
                     });
-                    setLastSync(new Date());
-                    console.log("Initial Seed Complete");
+                    console.log("SyncManager: Initial seed complete");
                 }
             } catch (e) {
-                console.error("Seed failed", e);
+                console.error("SyncManager: Seed failed", e);
             } finally {
                 setIsSyncing(false);
+                updatePendingCount();
             }
         }
-
         seed();
-    }, []);
+    }, [updatePendingCount]);
 
-    // Upstream Sync (Push)
-    useEffect(() => {
-        const pushChanges = async () => {
-            if (!navigator.onLine) return; // Simple check
+    // Push pending changes to server
+    const pushChanges = useCallback(async () => {
+        if (!navigator.onLine) return;
 
-            // 1. Get Pending Transactions
+        setIsSyncing(true);
+        let synced = 0;
+
+        try {
+            // 1. Sync Transactions
             const pendingTxs = await db.transactions.where('sync_status').equals('created').toArray();
-
-            if (pendingTxs.length === 0) return;
-
-            console.log(`SyncManager: Found ${pendingTxs.length} pending items. Syncing...`);
-            setIsSyncing(true);
-
             for (const tx of pendingTxs) {
                 try {
-                    // Call Server Action (We already have addTransaction, but it expects specific args)
-                    // We might need a purely "Sync" endpoint or reuse addTransaction.
-                    // Let's reuse addTransaction for now, but ideally we'd have a `syncBatch` endpoint.
-                    // For MVP, loop and send.
-                    const res = await (await import("@/app/actions")).addTransaction(
-                        tx.amount,
-                        tx.description,
-                        tx.type,
-                        tx.category_id,
-                        tx.debt_id
-                    );
-
+                    const res = await addTransaction(tx.amount, tx.description, tx.type, tx.category_id, tx.debt_id);
                     if (res.success) {
-                        // Mark as synced locally
                         await db.transactions.update(tx.id, { sync_status: 'synced' });
-                    } else {
-                        console.error("Failed to sync item", tx.id, res.error);
+                        synced++;
                     }
                 } catch (e) {
-                    console.error("Sync Error", e);
+                    console.error("SyncManager: Failed to sync transaction", tx.id, e);
                 }
             }
+
+            // 2. Sync Categories
+            const pendingCats = await db.categories.where('sync_status').equals('created').toArray();
+            for (const cat of pendingCats) {
+                try {
+                    const commitType = cat.type === 'fixed' ? 'fixed' : null;
+                    await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned);
+                    await db.categories.update(cat.id, { sync_status: 'synced' });
+                    synced++;
+                } catch (e) {
+                    console.error("SyncManager: Failed to sync category", cat.id, e);
+                }
+            }
+
+            // 3. Sync Debts
+            const pendingDebts = await db.debts.where('sync_status').equals('created').toArray();
+            for (const debt of pendingDebts) {
+                try {
+                    await addDebt(debt.name, debt.total_balance, debt.interest_rate);
+                    await db.debts.update(debt.id, { sync_status: 'synced' });
+                    synced++;
+                } catch (e) {
+                    console.error("SyncManager: Failed to sync debt", debt.id, e);
+                }
+            }
+
+            if (synced > 0) {
+                console.log(`SyncManager: Synced ${synced} items`);
+            }
+        } catch (e) {
+            console.error("SyncManager: Push failed", e);
+        } finally {
             setIsSyncing(false);
-            console.log("SyncManager: Push Complete");
+            updatePendingCount();
+        }
+    }, [updatePendingCount]);
+
+    // Online/Offline detection
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            pushChanges(); // Auto-sync when back online
         };
+        const handleOffline = () => setIsOnline(false);
 
-        // Run on mount and every 10 seconds
-        pushChanges();
-        const interval = setInterval(pushChanges, 10000);
-
-        // Also listen for online event
-        window.addEventListener('online', pushChanges);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        setIsOnline(navigator.onLine);
 
         return () => {
-            clearInterval(interval);
-            window.removeEventListener('online', pushChanges);
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
         };
-    }, []);
+    }, [pushChanges]);
 
-    return null; // Invisible component
+    // Periodic sync (every 30 seconds)
+    useEffect(() => {
+        const interval = setInterval(() => {
+            updatePendingCount();
+            if (navigator.onLine) pushChanges();
+        }, 30000);
+        return () => clearInterval(interval);
+    }, [pushChanges, updatePendingCount]);
+
+    // Initial check
+    useEffect(() => {
+        updatePendingCount();
+    }, [updatePendingCount]);
+
+    // Don't render if nothing to show
+    if (!showIndicator && isOnline) return null;
+
+    return (
+        <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${!isOnline
+                    ? "bg-amber-100 text-amber-800 border border-amber-300"
+                    : isSyncing
+                        ? "bg-blue-100 text-blue-800 border border-blue-300"
+                        : pendingCount > 0
+                            ? "bg-orange-100 text-orange-800 border border-orange-300"
+                            : "bg-green-100 text-green-800 border border-green-300"
+                }`}>
+                {!isOnline ? (
+                    <>
+                        <CloudOff size={14} />
+                        <span>Offline</span>
+                        {pendingCount > 0 && <span className="opacity-70">({pendingCount} pending)</span>}
+                    </>
+                ) : isSyncing ? (
+                    <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        <span>Syncing...</span>
+                    </>
+                ) : pendingCount > 0 ? (
+                    <>
+                        <Cloud size={14} />
+                        <span>{pendingCount} pending</span>
+                    </>
+                ) : (
+                    <>
+                        <Cloud size={14} />
+                        <span>Synced</span>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 }
