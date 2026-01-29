@@ -11,6 +11,7 @@ import { EditTransactionSheet } from "@/components/EditTransactionSheet";
 import { Info, X, LogOut } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 import { addTransaction, closeMonth } from "@/app/actions";
+import { Spinner } from "@/components/ui/Spinner";
 
 type DashboardData = {
     safeToSpend: number;
@@ -231,11 +232,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <header className="flex justify-between items-center mt-4">
                     <h1 className="font-bold text-stone-900 tracking-tight text-xl">Notepad Budget</h1>
                     <div className="flex items-center gap-2">
-                        <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&larr;</button>
+                        <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1 transition-transform active:scale-75">&larr;</button>
                         <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
                             {currentMonthName}
                         </span>
-                        <button onClick={() => changeMonth(1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1">&rarr;</button>
+                        <button onClick={() => changeMonth(1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1 transition-transform active:scale-75">&rarr;</button>
                     </div>
                 </header>
 
@@ -245,7 +246,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         {/* Info Icon */}
                         <button
                             onClick={() => setShowBreakdown(true)}
-                            className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-colors"
+                            className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-all active:scale-90"
                         >
                             <Info size={20} />
                         </button>
@@ -311,9 +312,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                                         <button
                                             onClick={handleLoadMore}
                                             disabled={isLoadingMore}
-                                            className="w-full py-3 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-lg transition-colors border border-dashed border-stone-200"
+                                            className="w-full py-3 text-xs font-bold uppercase tracking-widest text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-lg transition-colors border border-dashed border-stone-200 flex items-center justify-center gap-2 active:scale-98"
                                         >
-                                            {isLoadingMore ? "Loading..." : "Load More"}
+                                            {isLoadingMore ? <><Spinner /> Loading...</> : "Load More"}
                                         </button>
                                     )}
                                 </>
@@ -325,7 +326,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 {/* Savings & Debts Links */}
                 <section className="pt-4 border-t border-stone-200 border-dashed grid grid-cols-2 gap-4">
                     <Link href="/savings">
-                        <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
+                        <PaperCard className="bg-stone-50 hover:bg-white transition-all border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3 active:scale-95">
                             <div className="flex flex-col justify-between h-full min-h-[100px]">
                                 <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Future Expenses</h3>
                                 <div className="text-lg font-bold text-stone-800 flex items-center gap-1">
@@ -336,7 +337,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     </Link>
 
                     <Link href="/debts">
-                        <PaperCard className="bg-stone-50 hover:bg-white transition-colors border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3">
+                        <PaperCard className="bg-stone-50 hover:bg-white transition-all border border-stone-200 group cursor-pointer hover:shadow-md h-full !p-3 active:scale-95">
                             <div className="flex flex-col justify-between h-full min-h-[100px]">
                                 <div>
                                     <h3 className="text-stone-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total Debt</h3>
@@ -356,9 +357,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         <button
                             onClick={handleCloseMonth}
                             disabled={isSubmitting}
-                            className="w-full py-4 border-2 border-stone-200 text-xs text-stone-500 font-bold uppercase tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50 rounded-xl"
+                            className="w-full py-4 border-2 border-stone-200 text-xs text-stone-500 font-bold uppercase tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50 rounded-xl active:scale-95 flex items-center justify-center gap-2"
                         >
-                            Close & Roll Over to Next Month
+                            {isSubmitting ? <><Spinner /> Closing...</> : "Close & Roll Over to Next Month"}
                         </button>
                     </section>
                 )}
@@ -367,7 +368,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <footer className="text-center py-8 space-y-4">
                     <button
                         onClick={() => signOut()}
-                        className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors"
+                        className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95"
                     >
                         <LogOut size={14} /> Log Out
                     </button>

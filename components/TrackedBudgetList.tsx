@@ -34,7 +34,7 @@ export function TrackedBudgetList() {
             <div className="flex flex-col gap-4">
                 {budgets.map(b => (
                     <div key={b.id} className="w-full">
-                        <PaperCard className="p-4 space-y-3 border-l-4 border-l-stone-900">
+                        <PaperCard className="p-4 space-y-3 border-l-4 border-l-stone-900 transition-transform hover:scale-[1.01] active:scale-98 cursor-default">
                             <div className="flex justify-between items-end mb-1">
                                 <h3 className="font-bold text-stone-900">{b.name}</h3>
                                 <div className="text-right font-mono text-sm font-bold">

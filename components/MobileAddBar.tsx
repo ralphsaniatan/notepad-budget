@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import clsx from "clsx";
+import { Spinner } from "@/components/ui/Spinner";
 
 type TxType = 'expense' | 'income' | 'debt_payment';
 
@@ -140,9 +141,9 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         <button
                             disabled={isSubmitting || !amount}
                             onClick={handleSubmit}
-                            className="w-full bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95"
+                            className="w-full bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
                         >
-                            {isSubmitting ? "Saving..." : "Save Transaction"}
+                            {isSubmitting ? <><Spinner className="mr-1" /> Saving...</> : "Save Transaction"}
                         </button>
                     </div>
                 </div>
