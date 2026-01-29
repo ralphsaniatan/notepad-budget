@@ -7,7 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
-import { Info, LogOut } from "lucide-react";
+import { Info, LogOut, AlertTriangle } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 import { closeMonth } from "@/app/actions";
 import { Spinner } from "@/components/ui/Spinner";
@@ -27,6 +27,8 @@ export function DashboardClient({ initialData }: DashboardData) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingTx, setEditingTx] = useState<any>(null);
     const [showBreakdown, setShowBreakdown] = useState(false);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [pendingCount, setPendingCount] = useState(0);
 
     // Live Query for Data
     const transactions = useLiveQuery(() => db.transactions.orderBy('date').reverse().toArray()) || [];
@@ -319,16 +321,25 @@ export function DashboardClient({ initialData }: DashboardData) {
                 <footer className="text-center py-8 space-y-4">
                     <button
                         onClick={async () => {
-                            // Clear local Dexie cache (for ALL users - this is just cached data that will resync)
-                            // Server-side signOut handles actual data deletion for guests only
-                            await Promise.all([
-                                db.transactions.clear(),
-                                db.categories.clear(),
-                                db.debts.clear(),
-                                db.savings_goals.clear()
-                            ]);
-                            // signOut is a server action that redirects, no need to await
-                            signOut();
+                            // Check for pending unsynced items
+                            const txCount = await db.transactions.where('sync_status').anyOf(['created', 'updated']).count();
+                            const catCount = await db.categories.where('sync_status').anyOf(['created', 'updated']).count();
+                            const debtCount = await db.debts.where('sync_status').anyOf(['created', 'updated']).count();
+                            const total = txCount + catCount + debtCount;
+
+                            if (total > 0) {
+                                setPendingCount(total);
+                                setShowLogoutModal(true);
+                            } else {
+                                // No pending items - logout immediately
+                                await Promise.all([
+                                    db.transactions.clear(),
+                                    db.categories.clear(),
+                                    db.debts.clear(),
+                                    db.savings_goals.clear()
+                                ]);
+                                signOut();
+                            }
                         }}
                         className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95"
                     >
@@ -341,6 +352,50 @@ export function DashboardClient({ initialData }: DashboardData) {
                         v1.22.3
                     </div>
                 </footer>
+
+                {/* Logout Warning Modal */}
+                {showLogoutModal && (
+                    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 animate-in fade-in">
+                        <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full animate-in zoom-in-95 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-amber-100 rounded-full">
+                                    <AlertTriangle className="text-amber-600" size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-stone-900">Unsynced Data</h3>
+                                    <p className="text-sm text-stone-500">{pendingCount} item{pendingCount > 1 ? 's' : ''} not yet saved</p>
+                                </div>
+                            </div>
+
+                            <p className="text-sm text-stone-600">
+                                You have data that hasn't synced to the server yet. If you log out now, this data will be lost.
+                            </p>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowLogoutModal(false)}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-stone-100 text-stone-700 font-bold text-sm hover:bg-stone-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        await Promise.all([
+                                            db.transactions.clear(),
+                                            db.categories.clear(),
+                                            db.debts.clear(),
+                                            db.savings_goals.clear()
+                                        ]);
+                                        signOut();
+                                    }}
+                                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors"
+                                >
+                                    Log Out Anyway
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
             </main>
 
