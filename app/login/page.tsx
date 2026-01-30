@@ -3,7 +3,7 @@
 import { signIn, signUp, loginAsGuest } from "@/app/auth/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
 import { Lock, ArrowRight, User, Plus, LogIn, Sparkles, X, UserPlus, ChevronLeft, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import clsx from "clsx";
 
 type StoredUser = { name: string, email: string };
@@ -13,12 +13,12 @@ export default function LoginPage() {
     // State
     const [view, setView] = useState<ViewMode>('LOGIN'); // Default to LOGIN until hydrating
     const [knownUsers, setKnownUsers] = useState<StoredUser[]>([]);
+    const [isPending, startTransition] = useTransition();
 
     // Form State
     const [email, setEmail] = useState("");
     const [name, setName] = useState(""); // Display Name
     const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
 
     // Initial Load
     useEffect(() => {
@@ -47,40 +47,36 @@ export default function LoginPage() {
     // Handlers
     const handleLogin = async (formData: FormData) => {
         setError("");
-        setLoading(true);
-        const res = await signIn(formData);
-        if (res?.error) {
-            setError(res.error);
-            setLoading(false);
-        } else {
-            // Success! (Note: Redirect happens on server, but we can optimistically save)
-            // We can't guarantee name here if it's a fresh login, but if we have it in state/local, great.
-            // If they are logging in via form and we don't know the name, we just store Email as name temporarily or don't update name.
-            // For simple "Recent Users", saving Email is enough key.
-            const knownName = knownUsers.find(u => u.email === email)?.name || "User";
-            saveUserToLocal(knownName, email);
-        }
+        startTransition(async () => {
+            const res = await signIn(formData);
+            if (res?.error) {
+                setError(res.error);
+            } else {
+                const knownName = knownUsers.find(u => u.email === email)?.name || "User";
+                saveUserToLocal(knownName, email);
+            }
+        });
     };
 
     const handleSignUp = async (formData: FormData) => {
         setError("");
-        setLoading(true);
-        const res = await signUp(formData);
-        if (res?.error) {
-            setError(res.error);
-            setLoading(false);
-        } else {
-            saveUserToLocal(name, email);
-        }
+        startTransition(async () => {
+            const res = await signUp(formData);
+            if (res?.error) {
+                setError(res.error);
+            } else {
+                saveUserToLocal(name, email);
+            }
+        });
     };
 
-    const handleGuest = async () => {
-        setLoading(true);
-        const res = await loginAsGuest();
-        if (res?.error) {
-            setError(res.error);
-            setLoading(false);
-        }
+    const handleGuest = () => {
+        startTransition(async () => {
+            const res = await loginAsGuest();
+            if (res?.error) {
+                setError(res.error);
+            }
+        });
     };
 
     const selectUser = (u: StoredUser) => {
@@ -196,10 +192,10 @@ export default function LoginPage() {
                 </div>
 
                 <button
-                    disabled={loading}
+                    disabled={isPending}
                     className="w-full bg-stone-900 text-stone-50 py-4 rounded-xl text-sm font-bold hover:bg-black transition-all flex justify-center items-center gap-2 group disabled:opacity-50 shadow-lg"
                 >
-                    {loading ? (
+                    {isPending ? (
                         <>
                             <Loader2 size={16} className="animate-spin" />
                             Crunching...
@@ -238,7 +234,7 @@ export default function LoginPage() {
     return (
         <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-stone-100/50 relative">
             {/* Loading Overlay - matches logout experience */}
-            {loading && (
+            {isPending && (
                 <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col items-center justify-center gap-4 animate-in fade-in duration-200">
                     <img src="/logo.png" alt="Notepad Budget" className="h-16" />
                     <div className="flex items-center gap-2 text-stone-600">
