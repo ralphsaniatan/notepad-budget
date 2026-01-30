@@ -95,8 +95,10 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         if (currentNewCatType === 'fixed') serverCommitmentType = 'fixed';
                         if (currentNewCatType === 'needs') serverCommitmentType = 'variable_fixed';
 
-                        // Background sync - don't await
-                        addCategory(newCatName, serverCommitmentType, budgetLimit, currentIsPinned).catch(console.error);
+                        // Sync to server and mark as synced to prevent duplicate
+                        addCategory(newCatName, serverCommitmentType, budgetLimit, currentIsPinned)
+                            .then(() => db.categories.update(newCatId, { sync_status: 'synced' }))
+                            .catch(console.error);
                         finalTargetId = newCatId;
                     } catch (e) {
                         console.error("Failed to auto-create category", e);

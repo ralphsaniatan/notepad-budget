@@ -110,10 +110,12 @@ export function DashboardClient({ initialData }: DashboardData) {
         if (isNaN(amount) || amount <= 0) return;
 
         setIsSubmitting(true);
+        const txId = crypto.randomUUID();
+
         try {
             // 1. Write to Local DB Immediately
             const newTx = {
-                id: crypto.randomUUID(),
+                id: txId,
                 description: description || (type === 'income' ? 'Income' : type === 'debt_payment' ? 'Debt Payment' : 'Expense'),
                 amount,
                 type,
@@ -128,7 +130,12 @@ export function DashboardClient({ initialData }: DashboardData) {
             await db.transactions.add(newTx);
 
             // 2. Trigger Server Action (Hybrid Sync)
-            await addTransaction(amount, description || "", type, targetId, targetId);
+            const result = await addTransaction(amount, description || "", type, targetId, targetId);
+
+            // 3. CRITICAL: Mark as synced to prevent SyncManager creating duplicate
+            if (result?.success) {
+                await db.transactions.update(txId, { sync_status: 'synced' });
+            }
 
             toast.success("Transaction Added", {
                 description: `${description || (type === 'income' ? 'Income' : 'Expense')} for ${currency(amount)} logged.`
