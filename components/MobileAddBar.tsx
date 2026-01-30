@@ -44,70 +44,16 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
     const handleSubmit = async () => {
         let finalTargetId = targetId;
         const submitType = type;
+        const currentAmount = amount;
+        const currentDescription = description;
+        const currentCategorySearch = categorySearch;
+        const currentDebtSearch = debtSearch;
+        const currentNewCatType = newCatType;
+        const currentNewCatBudget = newCatBudget;
+        const currentIsPinned = isPinned;
+        const currentNewDebtBalance = newDebtBalance;
 
-        // --- 1. Auto-create CATEGORY ---
-        if (submitType === 'expense' && !targetId && categorySearch.trim()) {
-            const existing = categories.find(c => c.name.toLowerCase() === categorySearch.trim().toLowerCase());
-            if (existing) {
-                finalTargetId = existing.id;
-            } else {
-                const newCatId = crypto.randomUUID();
-                const newCatName = categorySearch.trim();
-                const isFixed = newCatType === 'fixed';
-                const budgetLimit = newCatBudget ? parseFloat(newCatBudget) : 0;
-
-                try {
-                    await db.categories.add({
-                        id: newCatId,
-                        name: newCatName,
-                        budget_limit: budgetLimit,
-                        type: isFixed ? 'fixed' : 'variable',
-                        is_pinned: isPinned,
-                        user_id: 'unknown',
-                        sync_status: 'created'
-                    });
-
-                    let serverCommitmentType: 'fixed' | 'variable_fixed' | null = null;
-                    if (newCatType === 'fixed') serverCommitmentType = 'fixed';
-                    if (newCatType === 'needs') serverCommitmentType = 'variable_fixed';
-
-                    await addCategory(newCatName, serverCommitmentType, budgetLimit, isPinned);
-                    finalTargetId = newCatId;
-                } catch (e) {
-                    console.error("Failed to auto-create category", e);
-                    return;
-                }
-            }
-        }
-
-        // --- 2. Auto-create DEBT (no button, just creates on submit) ---
-        if (submitType === 'debt_payment' && !targetId && debtSearch.trim()) {
-            const existing = debts.find(d => d.name.toLowerCase() === debtSearch.trim().toLowerCase());
-            if (existing) {
-                finalTargetId = existing.id;
-            } else {
-                // Auto-create the debt
-                const name = debtSearch.trim();
-                const balance = newDebtBalance ? parseFloat(newDebtBalance) : 0;
-
-                const res = await addDebt(name, balance, 0);
-
-                if (res && res.success && res.id) {
-                    finalTargetId = res.id;
-                } else {
-                    console.error("Failed to create debt", res);
-                }
-            }
-        }
-
-        if (!finalTargetId && submitType !== 'income') return;
-
-        onAdd(submitType, amount, finalTargetId, description);
-
-        // Refresh to update server data (debts/categories list)
-        router.refresh();
-
-        // Reset
+        // --- INSTANT UI: Close modal and reset immediately ---
         setAmount("");
         setDescription("");
         setTargetId("");
@@ -120,6 +66,71 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
         setNewDebtBalance("");
         setType('expense');
         setIsOpen(false);
+
+        // --- BACKGROUND: Run all server operations async ---
+        (async () => {
+            // --- 1. Auto-create CATEGORY ---
+            if (submitType === 'expense' && !finalTargetId && currentCategorySearch.trim()) {
+                const existing = categories.find(c => c.name.toLowerCase() === currentCategorySearch.trim().toLowerCase());
+                if (existing) {
+                    finalTargetId = existing.id;
+                } else {
+                    const newCatId = crypto.randomUUID();
+                    const newCatName = currentCategorySearch.trim();
+                    const isFixed = currentNewCatType === 'fixed';
+                    const budgetLimit = currentNewCatBudget ? parseFloat(currentNewCatBudget) : 0;
+
+                    try {
+                        await db.categories.add({
+                            id: newCatId,
+                            name: newCatName,
+                            budget_limit: budgetLimit,
+                            type: isFixed ? 'fixed' : 'variable',
+                            is_pinned: currentIsPinned,
+                            user_id: 'unknown',
+                            sync_status: 'created'
+                        });
+
+                        let serverCommitmentType: 'fixed' | 'variable_fixed' | null = null;
+                        if (currentNewCatType === 'fixed') serverCommitmentType = 'fixed';
+                        if (currentNewCatType === 'needs') serverCommitmentType = 'variable_fixed';
+
+                        // Background sync - don't await
+                        addCategory(newCatName, serverCommitmentType, budgetLimit, currentIsPinned).catch(console.error);
+                        finalTargetId = newCatId;
+                    } catch (e) {
+                        console.error("Failed to auto-create category", e);
+                        return;
+                    }
+                }
+            }
+
+            // --- 2. Auto-create DEBT ---
+            if (submitType === 'debt_payment' && !finalTargetId && currentDebtSearch.trim()) {
+                const existing = debts.find(d => d.name.toLowerCase() === currentDebtSearch.trim().toLowerCase());
+                if (existing) {
+                    finalTargetId = existing.id;
+                } else {
+                    const name = currentDebtSearch.trim();
+                    const balance = currentNewDebtBalance ? parseFloat(currentNewDebtBalance) : 0;
+
+                    const res = await addDebt(name, balance, 0);
+
+                    if (res && res.success && res.id) {
+                        finalTargetId = res.id;
+                    } else {
+                        console.error("Failed to create debt", res);
+                    }
+                }
+            }
+
+            if (!finalTargetId && submitType !== 'income') return;
+
+            onAdd(submitType, currentAmount, finalTargetId, currentDescription);
+
+            // Background refresh - don't block
+            router.refresh();
+        })();
     };
 
     // Filter categories
