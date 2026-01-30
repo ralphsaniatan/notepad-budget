@@ -195,7 +195,7 @@ export function DashboardClient({ initialData }: DashboardData) {
 
                 {/* App Header */}
                 <header className="flex justify-between items-center mt-4">
-                    <img src="/logo.png" alt="NB" className="w-10 h-10" />
+                    <img src="/logo.png" alt="Notepad Budget" className="h-8" />
                     <div className="flex items-center gap-2">
                         <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1 transition-transform active:scale-75">&larr;</button>
                         <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
