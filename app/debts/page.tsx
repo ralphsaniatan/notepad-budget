@@ -23,7 +23,7 @@ export default async function DebtsPage() {
                 <Link href="/" className="text-stone-400 hover:text-stone-900 transition-colors">
                     <ArrowLeft size={20} />
                 </Link>
-                <h1 className="font-bold text-stone-900 tracking-tight text-xl">Debts Tracker</h1>
+                <h1 className="font-bold text-stone-900 tracking-tight text-xl">Debt Tracker</h1>
             </header>
 
             <DebtsClient initialDebts={debts || []} />
