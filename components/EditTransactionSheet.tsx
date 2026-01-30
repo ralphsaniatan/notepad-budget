@@ -67,13 +67,18 @@ export function EditTransactionSheet({
         // Delete from local DB first (optimistic)
         try {
             await db.transactions.delete(transaction.id);
-            toast.success("Transaction deleted");
         } catch (e) {
             console.error("Local delete failed", e);
         }
 
-        // Sync to server in background
-        deleteTransaction(transaction.id).catch(console.error);
+        // Sync to server - MUST await to prevent refresh bringing back deleted tx
+        try {
+            await deleteTransaction(transaction.id);
+            toast.success("Transaction deleted");
+        } catch (e) {
+            console.error("Server delete failed", e);
+            toast.error("Failed to sync delete");
+        }
     };
 
     return (

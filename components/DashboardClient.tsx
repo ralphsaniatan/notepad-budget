@@ -7,7 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
-import { Info, LogOut, AlertTriangle } from "lucide-react";
+import { Info, LogOut, AlertTriangle, Loader2 } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 import { closeMonth } from "@/app/actions";
 import { Spinner } from "@/components/ui/Spinner";
@@ -28,6 +28,7 @@ export function DashboardClient({ initialData }: DashboardData) {
     const [editingTx, setEditingTx] = useState<any>(null);
     const [showBreakdown, setShowBreakdown] = useState(false);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
 
     // Live Query for Data
@@ -320,6 +321,7 @@ export function DashboardClient({ initialData }: DashboardData) {
                 {/* Footer / Log Out */}
                 <footer className="text-center py-8 space-y-4">
                     <button
+                        disabled={isLoggingOut}
                         onClick={async () => {
                             // Check for pending unsynced items
                             const txCount = await db.transactions.where('sync_status').anyOf(['created', 'updated']).count();
@@ -331,15 +333,18 @@ export function DashboardClient({ initialData }: DashboardData) {
                                 setPendingCount(total);
                                 setShowLogoutModal(true);
                             } else {
-                                // No pending items - logout immediately
-                                // DON'T clear local DB for registered users - it's a cache that reseeds on login
-                                // Server-side signOut handles guest data cleanup
+                                // Show loading immediately, then logout
+                                setIsLoggingOut(true);
                                 signOut();
                             }
                         }}
-                        className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95"
+                        className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95 disabled:opacity-50"
                     >
-                        <LogOut size={14} /> Log Out
+                        {isLoggingOut ? (
+                            <><Loader2 size={14} className="animate-spin" /> Logging out...</>
+                        ) : (
+                            <><LogOut size={14} /> Log Out</>
+                        )}
                     </button>
 
                     <div className="text-[10px] text-stone-300 font-mono select-all">
@@ -375,13 +380,19 @@ export function DashboardClient({ initialData }: DashboardData) {
                                     Cancel
                                 </button>
                                 <button
+                                    disabled={isLoggingOut}
                                     onClick={async () => {
-                                        // Only for unsynced data warning - don't clear, just logout
+                                        setIsLoggingOut(true);
+                                        setShowLogoutModal(false);
                                         signOut();
                                     }}
-                                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors"
+                                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
-                                    Log Out Anyway
+                                    {isLoggingOut ? (
+                                        <><Loader2 size={14} className="animate-spin" /> Logging out...</>
+                                    ) : (
+                                        "Log Out Anyway"
+                                    )}
                                 </button>
                             </div>
                         </div>
