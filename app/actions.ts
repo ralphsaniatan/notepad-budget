@@ -3,18 +3,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { unstable_noStore as noStore } from "next/cache";
-
-// Type definitions matching our schema
-type DashboardData = {
-    safeToSpend: number;
-    spent: number;
-    debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
-    recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string }[];
-    categories: { id: string, name: string }[];
-    breakdown?: { income: number, rollover: number, commitments: number, spent: number };
-    userId?: string;
-    email?: string;
-};
+import { DashboardData, Transaction, Category, Debt, SavingsGoal, DashboardTransaction } from "@/lib/types";
 
 // Fallback for initial state or error
 const DEFAULT_DASHBOARD: DashboardData = {
@@ -40,44 +29,70 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
         const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-        // Fetch or Create Month
-        let { data: month } = await supabase
-            .from('months')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('iso_month', isoMonth)
-            .single();
-
         // Safety Helper
         const safeNum = (val: any) => {
             const n = Number(val);
             return isNaN(n) ? 0 : n;
         };
 
-        // 2. Data Aggregation
+        // 2. Fetch Data in Parallel
+        const [
+            monthResult,
+            transactionsResult,
+            committedCategoriesResult,
+            debtsResult,
+            categoriesResult
+        ] = await Promise.all([
+            supabase
+                .from('months')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('iso_month', isoMonth)
+                .maybeSingle(),
+            supabase
+                .from('transactions')
+                .select(`
+                    *,
+                    categories ( name, is_commitment, commitment_type ),
+                    debts ( name )
+                `)
+                .eq('user_id', user.id)
+                .gte('date', isoMonth) // Only current month transactions for calculations
+                .order('date', { ascending: false })
+                .order('created_at', { ascending: false }),
+            supabase
+                .from('categories')
+                .select('id, budget_limit, is_pinned')
+                .eq('user_id', user.id)
+                .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true'),
+            supabase
+                .from('debts')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('total_balance', { ascending: false }),
+            supabase
+                .from('categories')
+                .select('id, name')
+                .eq('user_id', user.id)
+                .order('name')
+        ]);
+
+        const month = monthResult.data;
+        // Cast to unknown first to avoid deep type incompatibility issues with Supabase return types
+        const transactions = (transactionsResult.data as unknown as Transaction[]) || [];
+        const committedCategories = (committedCategoriesResult.data as unknown as Category[]) || [];
+        const debts = (debtsResult.data as unknown as Debt[]) || [];
+        const categories = (categoriesResult.data as unknown as { id: string, name: string }[]) || [];
+
+        // 3. Data Aggregation
         let income = safeNum(month?.income);
         const rollover = safeNum(month?.rollover);
-
-        // Get recent transactions for the list
-        const { data: allTransactions } = await supabase
-            .from('transactions')
-            .select(`
-                *,
-                categories ( name, is_commitment, commitment_type ),
-                debts ( name )
-            `)
-            .eq('user_id', user.id)
-            .gte('date', isoMonth) // Only current month transactions for calculations
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false });
-
-        const transactions = allTransactions || [];
 
         let spentVariable = 0;
         let overspend = 0;
         const commitmentSpending: Record<string, number> = {};
 
-        transactions.forEach((tx: any) => {
+        transactions.forEach((tx) => {
             const amount = safeNum(tx.amount);
             if (tx.type === 'income') {
                 income += amount;
@@ -88,9 +103,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
                 if (isCommitment) {
                     // Track spending for commitments to check overspend
-                    if (cat?.name) { // relying on name/id, ideally ID but name is consistent in this scope
+                    if (cat?.name) {
                         // We need the category ID to track accurately. 
-                        // The transaction query returns category_id.
                         const catId = tx.category_id || 'unknown';
                         commitmentSpending[catId] = (commitmentSpending[catId] || 0) + amount;
                     }
@@ -103,16 +117,10 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             }
         });
 
-        // 3. Get Commitments & Calculate Overspend
-        const { data: committedCategories } = await supabase
-            .from('categories')
-            .select('id, budget_limit, is_pinned') // Fetch ID for matching
-            .eq('user_id', user.id)
-            .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
-
+        // 4. Calculate Overspend
         let totalCommitments = 0;
 
-        committedCategories?.forEach(cat => {
+        committedCategories.forEach(cat => {
             const limit = safeNum(cat.budget_limit);
             totalCommitments += limit;
 
@@ -123,26 +131,10 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         });
 
         // Safe To Spend = (Income + Rollover) - Total Commitments (Envelopes) - Variable Spent - Overspend Penalty
-        // Notice: 'Overspend' is the amount EXCEEDING the envelope. 
-        // The first 'limit' amount was already deducted via 'totalCommitments'.
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
 
-        // 4. Get Debts
-        const { data: debts } = await supabase
-            .from('debts')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('total_balance', { ascending: false });
-
-        // 5. Get Categories for Dropdown (non-commitment)
-        const { data: categories } = await supabase
-            .from('categories')
-            .select('id, name')
-            .eq('user_id', user.id)
-            .order('name');
-
         // Map transactions for UI
-        const recentTransactions = transactions.map((tx: any) => {
+        const recentTransactions: DashboardTransaction[] = transactions.map((tx) => {
             let cleanDescription = tx.description;
             if (tx.type === 'debt_payment' && tx.debts?.name) {
                 if (!cleanDescription || cleanDescription === 'Debt Payment') {
@@ -167,9 +159,9 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         return {
             safeToSpend,
             spent: spentVariable + overspend,
-            debts: debts || [],
+            debts: debts,
             recentTransactions: recentTransactions.slice(0, 10), // Limit initial load
-            categories: categories || [],
+            categories: categories,
             breakdown: {
                 income,
                 rollover,
@@ -179,7 +171,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             userId: user.id,
             email: user.email
         };
-
 
     } catch (error) {
         console.error("Supabase Error:", error);
@@ -205,14 +196,16 @@ export async function getTransactions(offset: number = 0, limit: number = 10, mo
         .range(offset, offset + limit - 1);
 
     if (monthIso) {
-        // Stick to "Current Month" consistency if param provided
         query = query.gte('date', monthIso);
     }
 
     const { data } = await query;
     if (!data) return [];
 
-    return data.map((tx: any) => {
+    // Cast data to Transaction[] for processing
+    const transactions = data as unknown as Transaction[];
+
+    return transactions.map((tx) => {
         let cleanDescription = tx.description;
         if (tx.type === 'debt_payment' && tx.debts?.name) {
             if (!cleanDescription || cleanDescription === 'Debt Payment') {
@@ -228,13 +221,11 @@ export async function getTransactions(offset: number = 0, limit: number = 10, mo
             type: tx.type,
             date: tx.date,
             category_name: cleanDescription,
-            category_id: tx.categories?.id,
+            category_id: tx.category_id,
             debt_id: tx.debt_id
         };
     });
 }
-
-
 
 export type TrackedBudget = {
     id: string;
@@ -528,8 +519,6 @@ export async function updateTransaction(
     return { success: true };
 }
 
-// ... existing code ...
-
 export async function deleteTransaction(id: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -552,14 +541,6 @@ export async function deleteTransaction(id: string) {
 
 // --- Savings Goals Actions ---
 
-export type SavingsGoal = {
-    id: string;
-    name: string;
-    target_amount: number;
-    current_amount: number;
-    target_date: string;
-};
-
 export async function getSavingsGoals(): Promise<SavingsGoal[]> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -571,7 +552,7 @@ export async function getSavingsGoals(): Promise<SavingsGoal[]> {
         .eq('user_id', user.id)
         .order('target_date', { ascending: true });
 
-    return data || [];
+    return (data as unknown as SavingsGoal[]) || [];
 }
 
 export async function addSavingsGoal(name: string, targetAmount: number, targetDate: string) {
@@ -604,16 +585,12 @@ export async function contributeToSavings(goalId: string, amount: number, goalNa
     if (!user) return { success: false, error: "Not authenticated" };
 
     // 1. Log as Expense (reduces Safe to Spend)
-    // We will treat this as a "Savings Contribution" expense.
-    // Ideally we might want a 'savings' category or type, but 'expense' works for now to reduce safe-to-spend.
     const description = `Saved for ${goalName}`;
     const txRes = await addTransaction(amount, description, 'expense', undefined, undefined);
 
     if (!txRes.success) return txRes;
 
     // 2. Update Goal Current Amount
-    // We need to fetch current first to be safe or use increment if supabase supported it easily in js client (rpc)
-    // Simple fetch and update for now.
     const { data: goal } = await supabase.from('savings_goals').select('current_amount').eq('id', goalId).single();
     if (!goal) return { success: false, error: "Goal not found" };
 
@@ -706,10 +683,6 @@ export async function deleteCategory(id: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // Check usage? Ideally yes, but for MVP we might just let foreign keys handle it (set null or cascade)
-    // Our schema: category_id references categories(id) on delete set null. So transactions become "uncategorized".
-    // Safe to delete.
-
     const { error } = await supabase
         .from('categories')
         .delete()
@@ -757,6 +730,7 @@ export async function deleteDebt(id: string) {
     revalidatePath('/debts');
     return { success: true };
 }
+
 // --- Sync / Seeding Actions ---
 
 export async function getAllUserData() {
@@ -764,24 +738,24 @@ export async function getAllUserData() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // Get Months (for context)
-    const { data: months } = await supabase.from('months').select('*').eq('user_id', user.id);
-
-    // Get Components
-    const { data: transactions } = await supabase.from('transactions').select('*').eq('user_id', user.id);
-    const { data: categories } = await supabase.from('categories').select('*').eq('user_id', user.id);
-    const { data: debts } = await supabase.from('debts').select('*').eq('user_id', user.id);
-    const { data: savings_goals } = await supabase.from('savings_goals').select('*').eq('user_id', user.id);
+    // Parallelize these as well
+    const [months, transactions, categories, debts, savings_goals] = await Promise.all([
+        supabase.from('months').select('*').eq('user_id', user.id),
+        supabase.from('transactions').select('*').eq('user_id', user.id),
+        supabase.from('categories').select('*').eq('user_id', user.id),
+        supabase.from('debts').select('*').eq('user_id', user.id),
+        supabase.from('savings_goals').select('*').eq('user_id', user.id)
+    ]);
 
     return {
         success: true,
         data: {
             user_id: user.id,
-            transactions: transactions || [],
-            categories: categories || [],
-            debts: debts || [],
-            savings_goals: savings_goals || [],
-            months: months || []
+            transactions: transactions.data || [],
+            categories: categories.data || [],
+            debts: debts.data || [],
+            savings_goals: savings_goals.data || [],
+            months: months.data || []
         }
     };
 }
