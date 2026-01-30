@@ -236,7 +236,18 @@ export default function LoginPage() {
     );
 
     return (
-        <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-stone-100/50">
+        <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-stone-100/50 relative">
+            {/* Loading Overlay */}
+            {loading && (
+                <div className="fixed inset-0 z-50 bg-stone-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 animate-in fade-in duration-200">
+                    <img src="/logo.png" alt="NB Logo" className="w-20 h-20" />
+                    <div className="flex items-center gap-2 text-stone-600">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span className="text-sm font-bold">Crunching numbers...</span>
+                    </div>
+                </div>
+            )}
+
             <div className="w-full max-w-sm space-y-6">
                 {/* Logo & Branding */}
                 <div className="text-center space-y-2 mb-4">

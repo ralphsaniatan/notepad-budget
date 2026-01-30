@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, X, Trash2 } from "lucide-react";
+import { Save, X, Trash2, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { updateTransaction, deleteTransaction } from "@/app/actions";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
 
 type TxType = 'expense' | 'income' | 'debt_payment';
 
@@ -23,33 +25,55 @@ export function EditTransactionSheet({
     const [targetId, setTargetId] = useState(
         transaction.type === 'expense' ? transaction.category_id :
             transaction.type === 'debt_payment' ? transaction.debt_id : ""
-    ); // Note: We might need to fetch the raw tx object including ids if not passed. 
-    // Currently `recentTransactions` in DashboardData might not have raw category_id/debt_id.
-    // Let's assume for now we might need to pass partial data or handle it roughly.
-    // If DashboardData only provides proper names, we can't easily pre-select the ID without fuzzy matching or creating a Map.
-    // BETTER: Update getDashboardData to return category_id and debt_id in recentTransactions.
+    );
 
     const [type, setType] = useState<TxType>(transaction.type);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleUpdate = async () => {
-        setIsSubmitting(true);
+        const newAmount = parseFloat(amount);
         const categoryId = type !== 'debt_payment' ? targetId : undefined;
         const debtId = type === 'debt_payment' ? targetId : undefined;
 
-        await updateTransaction(transaction.id, parseFloat(amount), description, type, categoryId, debtId);
-        setIsSubmitting(false);
+        // Close immediately for instant UX
         onClose();
-        window.location.reload(); // Simple reload to reflect changes
+
+        // Update local DB first (optimistic)
+        try {
+            await db.transactions.update(transaction.id, {
+                amount: newAmount,
+                description,
+                type,
+                category_id: categoryId,
+                debt_id: debtId,
+                sync_status: 'updated'
+            });
+        } catch (e) {
+            console.error("Local update failed", e);
+        }
+
+        // Sync to server in background
+        updateTransaction(transaction.id, newAmount, description, type, categoryId, debtId)
+            .then(() => toast.success("Transaction updated"))
+            .catch(console.error);
     };
 
     const handleDelete = async () => {
         if (!confirm("Delete this transaction?")) return;
-        setIsSubmitting(true);
-        await deleteTransaction(transaction.id);
-        setIsSubmitting(false);
+
+        // Close immediately for instant UX
         onClose();
-        window.location.reload();
+
+        // Delete from local DB first (optimistic)
+        try {
+            await db.transactions.delete(transaction.id);
+            toast.success("Transaction deleted");
+        } catch (e) {
+            console.error("Local delete failed", e);
+        }
+
+        // Sync to server in background
+        deleteTransaction(transaction.id).catch(console.error);
     };
 
     return (
