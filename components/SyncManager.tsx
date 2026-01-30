@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { getAllUserData, addTransaction, addCategory, addDebt } from "@/app/actions";
 import { db } from "@/lib/db";
-import { Cloud, CloudOff, RefreshCw } from "lucide-react";
+import { Cloud, CloudOff, RefreshCw, Check } from "lucide-react";
 
 export function SyncManager() {
     const [isOnline, setIsOnline] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
-    const [showIndicator, setShowIndicator] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
 
     // Check pending items count
     const updatePendingCount = useCallback(async () => {
@@ -124,6 +124,9 @@ export function SyncManager() {
 
             if (synced > 0) {
                 console.log(`SyncManager: Synced ${synced} items`);
+                // Show success banner
+                setShowSuccess(true);
+                setTimeout(() => setShowSuccess(false), 3000);
             }
         } catch (e) {
             console.error("SyncManager: Push failed", e);
@@ -164,6 +167,18 @@ export function SyncManager() {
     useEffect(() => {
         updatePendingCount();
     }, [updatePendingCount]);
+
+    // Show success banner even if nothing else to show
+    if (showSuccess) {
+        return (
+            <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold bg-green-100 text-green-800 border border-green-300">
+                    <Check size={14} />
+                    <span>Synced!</span>
+                </div>
+            </div>
+        );
+    }
 
     // Don't render if online with nothing pending and not syncing
     if (isOnline && pendingCount === 0 && !isSyncing) return null;
