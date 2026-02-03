@@ -253,6 +253,19 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                             {op}
                                         </button>
                                     ))}
+                                    {/* Equals button to compute */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const result = evaluateMathExpression(amount);
+                                            if (result !== null) {
+                                                setAmount(result.toFixed(2));
+                                            }
+                                        }}
+                                        className="flex-1 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-bold text-lg transition-colors"
+                                    >
+                                        =
+                                    </button>
                                 </div>
                             </div>
 
