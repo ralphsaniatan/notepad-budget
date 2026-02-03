@@ -21,6 +21,7 @@ export function TrackedBudgetList() {
     // Ideally we pass `monthIso` as a prop. But to keep refactor simple, let's use URL or Today.
 
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [collapsed, setCollapsed] = useState(false);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -60,7 +61,7 @@ export function TrackedBudgetList() {
         };
     });
 
-    const [collapsed, setCollapsed] = useState(false);
+
 
     return (
         <section className="mb-8">
