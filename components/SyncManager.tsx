@@ -38,11 +38,17 @@ export function SyncManager() {
             }
 
             await db.transaction('rw', db.transactions, db.categories, db.debts, db.savings_goals, async () => {
-                // Get IDs of pending local items (don't overwrite these)
+                // Get IDs of pending local items (don't overwrite or delete these)
                 const pendingTxIds = (await db.transactions.where('sync_status').anyOf(['created', 'updated']).toArray()).map(t => t.id);
                 const pendingCatIds = (await db.categories.where('sync_status').anyOf(['created', 'updated']).toArray()).map(c => c.id);
                 const pendingDebtIds = (await db.debts.where('sync_status').anyOf(['created', 'updated']).toArray()).map(d => d.id);
                 const pendingSavingsIds = (await db.savings_goals.where('sync_status').anyOf(['created', 'updated']).toArray()).map(s => s.id);
+
+                // Get server IDs for comparison
+                const serverTxIds = new Set((res.data.transactions || []).map((t: any) => t.id));
+                const serverCatIds = new Set((res.data.categories || []).map((c: any) => c.id));
+                const serverDebtIds = new Set((res.data.debts || []).map((d: any) => d.id));
+                const serverSavingsIds = new Set((res.data.savings_goals || []).map((s: any) => s.id));
 
                 // MERGE: For each server item, update local if not pending
                 for (const tx of res.data.transactions || []) {
@@ -63,6 +69,39 @@ export function SyncManager() {
                 for (const goal of res.data.savings_goals || []) {
                     if (!pendingSavingsIds.includes(goal.id)) {
                         await db.savings_goals.put({ ...goal, sync_status: 'synced' });
+                    }
+                }
+
+                // DELETE: Remove local synced items that no longer exist on server
+                const localSyncedTxs = await db.transactions.where('sync_status').equals('synced').toArray();
+                for (const tx of localSyncedTxs) {
+                    if (!serverTxIds.has(tx.id)) {
+                        await db.transactions.delete(tx.id);
+                        console.log("SyncManager: Removed deleted transaction", tx.id);
+                    }
+                }
+
+                const localSyncedCats = await db.categories.where('sync_status').equals('synced').toArray();
+                for (const cat of localSyncedCats) {
+                    if (!serverCatIds.has(cat.id)) {
+                        await db.categories.delete(cat.id);
+                        console.log("SyncManager: Removed deleted category", cat.id);
+                    }
+                }
+
+                const localSyncedDebts = await db.debts.where('sync_status').equals('synced').toArray();
+                for (const debt of localSyncedDebts) {
+                    if (!serverDebtIds.has(debt.id)) {
+                        await db.debts.delete(debt.id);
+                        console.log("SyncManager: Removed deleted debt", debt.id);
+                    }
+                }
+
+                const localSyncedSavings = await db.savings_goals.where('sync_status').equals('synced').toArray();
+                for (const goal of localSyncedSavings) {
+                    if (!serverSavingsIds.has(goal.id)) {
+                        await db.savings_goals.delete(goal.id);
+                        console.log("SyncManager: Removed deleted savings goal", goal.id);
                     }
                 }
             });
@@ -285,12 +324,12 @@ export function SyncManager() {
     return (
         <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
             <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${syncError
-                    ? "bg-red-100 text-red-800 border border-red-300"
-                    : !isOnline
-                        ? "bg-amber-100 text-amber-800 border border-amber-300"
-                        : (isSyncing || isPulling)
-                            ? "bg-blue-100 text-blue-800 border border-blue-300"
-                            : "bg-orange-100 text-orange-800 border border-orange-300"
+                ? "bg-red-100 text-red-800 border border-red-300"
+                : !isOnline
+                    ? "bg-amber-100 text-amber-800 border border-amber-300"
+                    : (isSyncing || isPulling)
+                        ? "bg-blue-100 text-blue-800 border border-blue-300"
+                        : "bg-orange-100 text-orange-800 border border-orange-300"
                 }`}>
                 {syncError ? (
                     <>
