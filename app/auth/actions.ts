@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+export async function getUser() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return { user: user ? { email: user.email, isGuest: user.user_metadata?.is_guest } : null };
+}
+
 export async function signIn(formData: FormData) {
     let email = formData.get("email") as string; // User might enter "Ralph"
     const password = formData.get("password") as string;

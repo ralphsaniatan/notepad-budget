@@ -7,7 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
-import { Info, LogOut, AlertTriangle, Loader2, Calendar, ChevronDown } from "lucide-react";
+import { Info, LogOut, AlertTriangle, Loader2, Calendar, ChevronDown, Settings } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 import { closeMonth } from "@/app/actions";
 import { Spinner } from "@/components/ui/Spinner";
@@ -203,7 +203,12 @@ export function DashboardClient({ initialData }: DashboardData) {
 
                 {/* App Header */}
                 <header className="flex justify-between items-center mt-4">
-                    <img src="/logo.png" alt="Notepad Budget" className="h-8" />
+                    <div className="flex items-center gap-3">
+                        <img src="/logo.png" alt="Notepad Budget" className="h-8" />
+                        <Link href="/profile" className="p-2 bg-stone-100 hover:bg-stone-200 rounded-full transition-colors dark:bg-stone-800 dark:hover:bg-stone-700">
+                            <Settings size={16} className="text-stone-500 dark:text-stone-400" />
+                        </Link>
+                    </div>
                     <div className="relative">
                         <button
                             onClick={() => setShowMonthPicker(!showMonthPicker)}
