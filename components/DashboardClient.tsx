@@ -7,7 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
-import { Info, LogOut, AlertTriangle, Loader2 } from "lucide-react";
+import { Info, LogOut, AlertTriangle, Loader2, Calendar, ChevronDown } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 import { closeMonth } from "@/app/actions";
 import { Spinner } from "@/components/ui/Spinner";
@@ -41,6 +41,7 @@ export function DashboardClient({ initialData }: DashboardData) {
 
     // Date Logic
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -203,37 +204,84 @@ export function DashboardClient({ initialData }: DashboardData) {
                 {/* App Header */}
                 <header className="flex justify-between items-center mt-4">
                     <img src="/logo.png" alt="Notepad Budget" className="h-8" />
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => changeMonth(-1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1 transition-transform active:scale-75">&larr;</button>
-                        <span className="text-sm font-bold font-mono text-stone-900 bg-yellow-200 px-2 py-1 transform -rotate-2 shadow-sm">
-                            {currentMonthName}
-                        </span>
-                        <button onClick={() => changeMonth(1)} className="text-stone-400 hover:text-stone-900 text-lg font-bold px-2 py-1 transition-transform active:scale-75">&rarr;</button>
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowMonthPicker(!showMonthPicker)}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 transition-colors text-stone-700 font-bold text-sm"
+                        >
+                            <Calendar size={14} />
+                            <span>{currentMonthName}</span>
+                            <ChevronDown size={14} className={clsx("transition-transform", showMonthPicker && "rotate-180")} />
+                        </button>
+                        {showMonthPicker && (
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-xl shadow-xl z-50 p-2 min-w-[200px] animate-in fade-in zoom-in-95">
+                                <div className="grid grid-cols-3 gap-1">
+                                    {Array.from({ length: 12 }, (_, i) => {
+                                        const monthDate = new Date(currentDate.getFullYear(), i, 1);
+                                        const isCurrentMonth = i === currentDate.getMonth();
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => {
+                                                    setCurrentDate(monthDate);
+                                                    setShowMonthPicker(false);
+                                                }}
+                                                className={clsx(
+                                                    "px-2 py-1.5 rounded-lg text-xs font-bold transition-colors",
+                                                    isCurrentMonth
+                                                        ? "bg-stone-900 text-white"
+                                                        : "hover:bg-stone-100 text-stone-600"
+                                                )}
+                                            >
+                                                {monthDate.toLocaleDateString('en-US', { month: 'short' })}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="flex gap-1 mt-2 pt-2 border-t border-stone-100">
+                                    <button
+                                        onClick={() => setCurrentDate(new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), 1))}
+                                        className="flex-1 px-2 py-1 rounded text-xs font-bold text-stone-400 hover:bg-stone-100"
+                                    >
+                                        {currentDate.getFullYear() - 1}
+                                    </button>
+                                    <span className="flex-1 px-2 py-1 text-center text-xs font-bold text-stone-700">
+                                        {currentDate.getFullYear()}
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentDate(new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), 1))}
+                                        className="flex-1 px-2 py-1 rounded text-xs font-bold text-stone-400 hover:bg-stone-100"
+                                    >
+                                        {currentDate.getFullYear() + 1}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </header>
 
-                {/* Hero Card */}
+                {/* Hero Card - Compact */}
                 <section>
-                    <PaperCard className="bg-white text-stone-900 border-stone-200 shadow-xl transition-transform hover:scale-[1.01] relative">
+                    <PaperCard className="bg-white text-stone-900 border-stone-200 shadow-lg relative">
                         {/* Info Icon */}
                         <button
                             onClick={() => setShowBreakdown(true)}
-                            className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 transition-all active:scale-90"
+                            className="absolute top-3 right-3 text-stone-400 hover:text-stone-600 transition-all active:scale-90"
                         >
-                            <Info size={20} />
+                            <Info size={16} />
                         </button>
 
-                        <div className="flex flex-col items-center justify-center p-6 py-10">
-                            <span className="text-stone-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-4">
+                        <div className="flex flex-col items-center justify-center px-4 py-5">
+                            <span className="text-stone-400 uppercase text-[9px] font-bold tracking-[0.2em] mb-2">
                                 Safe to Spend
                             </span>
-                            <div className={clsx("flex items-center justify-center gap-2 font-mono font-bold tracking-tighter", safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
-                                <span className="text-xl md:text-2xl opacity-60">AED</span>
-                                <span className="text-5xl md:text-6xl">
+                            <div className={clsx("flex items-center justify-center gap-1 font-mono font-bold tracking-tighter", safeToSpend < 0 ? "text-red-600" : "text-stone-900")}>
+                                <span className="text-base opacity-60">AED</span>
+                                <span className="text-3xl md:text-4xl">
                                     {safeToSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                             </div>
-                            {spent > 0 && <div className="mt-4 bg-red-100 border border-red-200 text-red-700 text-xs font-mono px-4 py-2 rounded-full font-bold shadow-sm">Spent: {currency(spent)}</div>}
+                            {spent > 0 && <div className="mt-2 bg-red-50 text-red-600 text-[10px] font-mono px-3 py-1 rounded-full font-bold">Spent: {currency(spent)}</div>}
                         </div>
                     </PaperCard>
                 </section>

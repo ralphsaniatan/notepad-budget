@@ -60,37 +60,61 @@ export function TrackedBudgetList() {
         };
     });
 
+    const [collapsed, setCollapsed] = useState(false);
+
     return (
         <section className="mb-8">
-            <h2 className="text-xs uppercase font-bold tracking-widest text-stone-400 mb-3 px-1">Pinned Budgets</h2>
-            <div className="flex flex-col gap-4">
-                {budgets.map(b => (
-                    <div key={b.id} className="w-full">
-                        <PaperCard className="p-4 space-y-3 border-l-4 border-l-stone-900 transition-transform hover:scale-[1.01] active:scale-98 cursor-default">
-                            <div className="flex justify-between items-end mb-1">
-                                <h3 className="font-bold text-stone-900">{b.name}</h3>
-                                <div className="text-right font-mono text-sm font-bold">
-                                    <span className={getStatusColor(b.status)}>
-                                        AED {Math.abs(b.remaining).toFixed(0)}
-                                    </span>
-                                    <span className="text-stone-300"> / {b.budget_limit}</span>
-                                    <span className="ml-1 text-[10px] uppercase text-stone-400 tracking-wider">
-                                        {b.status === 'over' ? 'Over' : 'Left'}
-                                    </span>
-                                </div>
-                            </div>
+            <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="flex justify-between items-center w-full px-1 mb-3 group"
+            >
+                <h2 className="text-xs uppercase font-bold tracking-widest text-stone-400 group-hover:text-stone-600 transition-colors">
+                    Pinned Budgets ({budgets.length})
+                </h2>
+                <svg
+                    className={`w-4 h-4 text-stone-400 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
 
-                            {/* Progress Bar */}
-                            <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-500 ${getProgressBarColor(b.status, b.percent)}`}
-                                    style={{ width: `${Math.min(100, b.percent)}%` }}
-                                />
-                            </div>
-                        </PaperCard>
-                    </div>
-                ))}
-            </div>
+            {!collapsed && (
+                <div className="flex flex-col gap-3">
+                    {budgets.map(b => (
+                        <a
+                            key={b.id}
+                            href="/categories"
+                            className="block w-full"
+                        >
+                            <PaperCard className="p-3 space-y-2 border-l-4 border-l-stone-900 transition-all hover:bg-stone-50 active:scale-[0.98] cursor-pointer">
+                                <div className="flex justify-between items-end">
+                                    <h3 className="font-bold text-stone-900 text-sm">{b.name}</h3>
+                                    <div className="text-right font-mono text-xs font-bold">
+                                        <span className={getStatusColor(b.status)}>
+                                            AED {Math.abs(b.remaining).toFixed(0)}
+                                        </span>
+                                        <span className="text-stone-300"> / {b.budget_limit}</span>
+                                        <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
+                                            {b.status === 'over' ? 'Over' : 'Left'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Progress Bar */}
+                                <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-500 ${getProgressBarColor(b.status, b.percent)}`}
+                                        style={{ width: `${Math.min(100, b.percent)}%` }}
+                                    />
+                                </div>
+                            </PaperCard>
+                        </a>
+                    ))}
+                </div>
+            )}
         </section>
     );
 }
