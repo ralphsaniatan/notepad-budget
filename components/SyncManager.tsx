@@ -23,6 +23,19 @@ export function SyncManager() {
         setPendingCount(total);
     }, []);
 
+    // Global error handler for ChunkLoadError (new deployments)
+    useEffect(() => {
+        const handleChunkError = (event: ErrorEvent) => {
+            const isChunkError = /Loading chunk [\d]+ failed/.test(event.message) || /Unexpected token/.test(event.message);
+            if (isChunkError) {
+                console.log("ChunkLoadError detected, reloading...");
+                window.location.reload();
+            }
+        };
+        window.addEventListener('error', handleChunkError);
+        return () => window.removeEventListener('error', handleChunkError);
+    }, []);
+
     // Pull Data from Server (Merge Strategy)
     const pullFromServer = useCallback(async () => {
         if (!navigator.onLine) return;

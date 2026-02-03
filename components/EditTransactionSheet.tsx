@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Save, X, Trash2, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { updateTransaction, deleteTransaction } from "@/app/actions";
@@ -100,7 +101,17 @@ export function EditTransactionSheet({
         }
     };
 
-    return (
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
+    if (!mounted) return null;
+
+    // Use Portal to escape any parent stacking contexts/transforms
+    return createPortal(
         <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm">
             <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
 
@@ -205,6 +216,7 @@ export function EditTransactionSheet({
                     </button>
                 </div>
             </div>
-        </div>
-    )
+        </div>,
+        document.body
+    );
 }

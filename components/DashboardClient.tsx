@@ -7,7 +7,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { MobileAddBar } from "@/components/MobileAddBar";
 import { EditTransactionSheet } from "@/components/EditTransactionSheet";
-import { Info, LogOut, AlertTriangle, Loader2, Calendar, ChevronDown, Settings } from "lucide-react";
+import { Info, AlertTriangle, Loader2, Calendar, ChevronDown, Settings } from "lucide-react";
 import { TrackedBudgetList } from "@/components/TrackedBudgetList";
 import { closeMonth } from "@/app/actions";
 import { Spinner } from "@/components/ui/Spinner";
@@ -27,8 +27,6 @@ export function DashboardClient({ initialData }: DashboardData) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingTx, setEditingTx] = useState<any>(null);
     const [showBreakdown, setShowBreakdown] = useState(false);
-    const [showLogoutModal, setShowLogoutModal] = useState(false);
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
 
     // Live Query for Data
@@ -205,8 +203,8 @@ export function DashboardClient({ initialData }: DashboardData) {
                 <header className="flex justify-between items-center mt-4">
                     <div className="flex items-center gap-3">
                         <img src="/logo.png" alt="Notepad Budget" className="h-8" />
-                        <Link href="/profile" className="p-2 bg-stone-100 hover:bg-stone-200 rounded-full transition-colors dark:bg-stone-800 dark:hover:bg-stone-700">
-                            <Settings size={16} className="text-stone-500 dark:text-stone-400" />
+                        <Link href="/profile" className="p-2 bg-stone-50 hover:bg-stone-100 rounded-lg transition-colors">
+                            <Settings size={18} className="text-stone-400" />
                         </Link>
                     </div>
                     <div className="relative">
@@ -380,84 +378,12 @@ export function DashboardClient({ initialData }: DashboardData) {
 
                 {/* Footer / Log Out */}
                 <footer className="text-center py-8 space-y-4">
-                    <button
-                        disabled={isLoggingOut}
-                        onClick={async () => {
-                            // Check for pending unsynced items
-                            const txCount = await db.transactions.where('sync_status').anyOf(['created', 'updated']).count();
-                            const catCount = await db.categories.where('sync_status').anyOf(['created', 'updated']).count();
-                            const debtCount = await db.debts.where('sync_status').anyOf(['created', 'updated']).count();
-                            const total = txCount + catCount + debtCount;
-
-                            if (total > 0) {
-                                setPendingCount(total);
-                                setShowLogoutModal(true);
-                            } else {
-                                // Show loading immediately, then logout
-                                setIsLoggingOut(true);
-                                signOut();
-                            }
-                        }}
-                        className="text-stone-400 hover:text-stone-900 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors active:scale-95 disabled:opacity-50"
-                    >
-                        {isLoggingOut ? (
-                            <><Loader2 size={14} className="animate-spin" /> Logging out...</>
-                        ) : (
-                            <><LogOut size={14} /> Log Out</>
-                        )}
-                    </button>
-
                     <div className="text-[10px] text-stone-300 font-mono select-all">
-                        {/* {data.email} <br />
-                        UID: {data.userId?.slice(-4) || '----'} | v1.22.3 */}
                         v{process.env.APP_VERSION}
                     </div>
                 </footer>
 
-                {/* Logout Warning Modal */}
-                {showLogoutModal && (
-                    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 animate-in fade-in">
-                        <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full animate-in zoom-in-95 space-y-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-amber-100 rounded-full">
-                                    <AlertTriangle className="text-amber-600" size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-stone-900">Unsynced Data</h3>
-                                    <p className="text-sm text-stone-500">{pendingCount} item{pendingCount > 1 ? 's' : ''} not yet saved</p>
-                                </div>
-                            </div>
 
-                            <p className="text-sm text-stone-600">
-                                You have data that hasn't synced to the server yet. If you log out now, this data will be lost.
-                            </p>
-
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowLogoutModal(false)}
-                                    className="flex-1 py-3 px-4 rounded-xl bg-stone-100 text-stone-700 font-bold text-sm hover:bg-stone-200 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    disabled={isLoggingOut}
-                                    onClick={async () => {
-                                        setIsLoggingOut(true);
-                                        setShowLogoutModal(false);
-                                        signOut();
-                                    }}
-                                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {isLoggingOut ? (
-                                        <><Loader2 size={14} className="animate-spin" /> Logging out...</>
-                                    ) : (
-                                        "Log Out Anyway"
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
             </main>
 
