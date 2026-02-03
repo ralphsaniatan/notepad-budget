@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SyncManager } from "@/components/SyncManager";
+import { PWAUpdater } from "@/components/PWAUpdater";
 import { Toaster } from "sonner";
 
 const inter = Inter({
@@ -40,6 +41,7 @@ export default function RootLayout({
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased bg-stone-50 text-stone-900`}
       >
         <SyncManager />
+        <PWAUpdater />
         {children}
         <Toaster position="top-center" />
       </body>
