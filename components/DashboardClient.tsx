@@ -214,7 +214,7 @@ export function DashboardClient({ initialData }: DashboardData) {
                             <ChevronDown size={14} className={clsx("transition-transform", showMonthPicker && "rotate-180")} />
                         </button>
                         {showMonthPicker && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-xl shadow-xl z-50 p-2 min-w-[200px] animate-in fade-in zoom-in-95">
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-xl shadow-xl z-50 p-2 min-w-[200px]">
                                 <div className="grid grid-cols-3 gap-1">
                                     {Array.from({ length: 12 }, (_, i) => {
                                         const monthDate = new Date(currentDate.getFullYear(), i, 1);
