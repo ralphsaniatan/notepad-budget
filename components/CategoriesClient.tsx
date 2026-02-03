@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 // Currency helper
 const currency = (amount: number) =>
-    new Intl.NumberFormat('en-AE', { style: 'currency', currency: 'AED', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+    new Intl.NumberFormat('en-AE', { style: 'currency', currency: 'AED', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 
 type CatType = 'fixed' | 'needs' | 'wants';
 

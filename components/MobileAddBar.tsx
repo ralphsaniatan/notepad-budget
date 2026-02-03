@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, ShoppingBag, Landmark, Check, CreditCard } from "lucide-react";
+import { Plus, X, ShoppingBag, Landmark, Check, CreditCard, Calculator } from "lucide-react";
 import clsx from "clsx";
 import { Spinner } from "@/components/ui/Spinner";
 import { db } from "@/lib/db";
@@ -10,6 +10,33 @@ import { addCategory, addDebt } from "@/app/actions";
 
 type TxType = 'expense' | 'income' | 'debt_payment';
 type CatType = 'fixed' | 'needs' | 'wants';
+
+// Safe math expression evaluator (handles +, -, *, /)
+function evaluateMathExpression(expr: string): number | null {
+    // Remove all whitespace
+    const cleaned = expr.replace(/\s/g, '');
+
+    // Check if it's just a plain number
+    if (/^[\d.]+$/.test(cleaned)) {
+        return parseFloat(cleaned);
+    }
+
+    // Only allow safe characters: digits, decimal, operators
+    if (!/^[\d.+\-*/()]+$/.test(cleaned)) {
+        return null;
+    }
+
+    try {
+        // Use Function constructor for safe eval (no access to global scope)
+        const result = new Function(`return (${cleaned})`)();
+        if (typeof result === 'number' && isFinite(result) && result >= 0) {
+            return Math.round(result * 100) / 100; // Round to 2 decimals
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
 
 export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
     categories: { id: string, name: string }[],
@@ -186,6 +213,32 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
 
                         <div className="space-y-4">
 
+                            {/* Amount - FIRST (User Request: prioritize amount) */}
+                            <div className="space-y-2">
+                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
+                                    Amount (AED)
+                                    {/[+\-*/]/.test(amount) && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full flex items-center gap-1"><Calculator size={10} /> Math</span>}
+                                </label>
+                                <input
+                                    ref={amountRef}
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="0.00 or 50+20"
+                                    value={amount}
+                                    onChange={e => setAmount(e.target.value)}
+                                    onBlur={() => {
+                                        if (/[+\-*/]/.test(amount)) {
+                                            const result = evaluateMathExpression(amount);
+                                            if (result !== null) {
+                                                setAmount(result.toFixed(2));
+                                            }
+                                        }
+                                    }}
+                                    autoFocus
+                                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-2xl font-mono font-bold outline-none focus:border-stone-900"
+                                />
+                            </div>
+
                             {/* --- EXPENSE: Category --- */}
                             {type === 'expense' && (
                                 <div className="space-y-2">
@@ -226,12 +279,12 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                                     <button onClick={() => setIsTypeConfirmed(false)} className="text-xs font-bold text-blue-500 hover:text-blue-700">Change</button>
                                                 </div>
                                             </div>
-                                            {newCatType !== 'fixed' && (
-                                                <div className="space-y-2">
-                                                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Monthly Limit (AED)</label>
-                                                    <input type="number" placeholder="0" value={newCatBudget} onChange={e => setNewCatBudget(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
-                                                </div>
-                                            )}
+                                            <div className="space-y-2">
+                                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
+                                                    {newCatType === 'fixed' ? 'Fixed Amount (AED)' : 'Monthly Limit (AED)'}
+                                                </label>
+                                                <input type="number" placeholder="0.00" inputMode="decimal" step="0.01" value={newCatBudget} onChange={e => setNewCatBudget(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -265,11 +318,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                 </div>
                             )}
 
-                            {/* Amount */}
-                            <div className="space-y-2">
-                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Amount (AED)</label>
-                                <input ref={amountRef} type="number" placeholder="0.00" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-2xl font-mono font-bold outline-none focus:border-stone-900" />
-                            </div>
+
 
                             {/* Detailed Description */}
                             <div className="space-y-2">

@@ -3,13 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { getAllUserData, addTransaction, addCategory, addDebt } from "@/app/actions";
 import { db } from "@/lib/db";
-import { Cloud, CloudOff, RefreshCw, Check } from "lucide-react";
+import { Cloud, CloudOff, RefreshCw, Check, Download, Upload, AlertCircle } from "lucide-react";
 
 export function SyncManager() {
     const [isOnline, setIsOnline] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isPulling, setIsPulling] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [lastPull, setLastPull] = useState<Date | null>(null);
+    const [syncError, setSyncError] = useState<string | null>(null);
 
     // Check pending items count
     const updatePendingCount = useCallback(async () => {
@@ -18,20 +21,73 @@ export function SyncManager() {
         const debtCount = await db.debts.where('sync_status').anyOf(['created', 'updated']).count();
         const total = txCount + catCount + debtCount;
         setPendingCount(total);
-        // Only show indicator when there's something to show (offline, syncing, or pending)
-        // Hide when online with nothing pending
     }, []);
 
-    // Initial Seed from Server - runs when local DB is empty
+    // Pull Data from Server (Merge Strategy)
+    const pullFromServer = useCallback(async () => {
+        if (!navigator.onLine) return;
+        
+        setIsPulling(true);
+        setSyncError(null);
+        console.log("SyncManager: Pulling data from server...");
+
+        try {
+            const res = await getAllUserData();
+            if (!res.success || !res.data) {
+                throw new Error("Failed to fetch data from server");
+            }
+
+            await db.transaction('rw', db.transactions, db.categories, db.debts, db.savings_goals, async () => {
+                // Get IDs of pending local items (don't overwrite these)
+                const pendingTxIds = (await db.transactions.where('sync_status').anyOf(['created', 'updated']).toArray()).map(t => t.id);
+                const pendingCatIds = (await db.categories.where('sync_status').anyOf(['created', 'updated']).toArray()).map(c => c.id);
+                const pendingDebtIds = (await db.debts.where('sync_status').anyOf(['created', 'updated']).toArray()).map(d => d.id);
+                const pendingSavingsIds = (await db.savings_goals.where('sync_status').anyOf(['created', 'updated']).toArray()).map(s => s.id);
+
+                // MERGE: For each server item, update local if not pending
+                for (const tx of res.data.transactions || []) {
+                    if (!pendingTxIds.includes(tx.id)) {
+                        await db.transactions.put({ ...tx, sync_status: 'synced' });
+                    }
+                }
+                for (const cat of res.data.categories || []) {
+                    if (!pendingCatIds.includes(cat.id)) {
+                        await db.categories.put({ ...cat, sync_status: 'synced' });
+                    }
+                }
+                for (const debt of res.data.debts || []) {
+                    if (!pendingDebtIds.includes(debt.id)) {
+                        await db.debts.put({ ...debt, sync_status: 'synced' });
+                    }
+                }
+                for (const goal of res.data.savings_goals || []) {
+                    if (!pendingSavingsIds.includes(goal.id)) {
+                        await db.savings_goals.put({ ...goal, sync_status: 'synced' });
+                    }
+                }
+            });
+
+            setLastPull(new Date());
+            console.log("SyncManager: Pull complete");
+        } catch (e: any) {
+            console.error("SyncManager: Pull failed", e);
+            setSyncError(e.message || "Pull failed");
+        } finally {
+            setIsPulling(false);
+            updatePendingCount();
+        }
+    }, [updatePendingCount]);
+
+    // Initial Seed from Server - runs when local DB is completely empty
     useEffect(() => {
         async function seed() {
-            // Check if local DB is empty (check all tables)
             const txCount = await db.transactions.count();
             const catCount = await db.categories.count();
 
-            // If we have transactions and categories, assume seeded
-            if (txCount > 0 && catCount > 0) {
-                console.log("SyncManager: Local DB already has data, skipping seed");
+            if (txCount > 0 || catCount > 0) {
+                console.log("SyncManager: Local DB has data, triggering background pull instead of seed");
+                // Still pull to get latest updates
+                pullFromServer();
                 return;
             }
 
@@ -41,7 +97,6 @@ export function SyncManager() {
             try {
                 const res = await getAllUserData();
                 if (res.success && res.data) {
-                    // Clear existing to avoid duplicates then add
                     await db.transaction('rw', db.transactions, db.categories, db.debts, db.savings_goals, async () => {
                         await db.transactions.clear();
                         await db.categories.clear();
@@ -61,9 +116,8 @@ export function SyncManager() {
                             await db.savings_goals.bulkAdd(res.data.savings_goals.map((s: any) => ({ ...s, sync_status: 'synced' })));
                         }
                     });
-                    console.log("SyncManager: Seed complete -", res.data.transactions?.length, "transactions,", res.data.categories?.length, "categories");
-                } else {
-                    console.log("SyncManager: No data returned from server");
+                    setLastPull(new Date());
+                    console.log("SyncManager: Seed complete");
                 }
             } catch (e) {
                 console.error("SyncManager: Seed failed", e);
@@ -73,14 +127,16 @@ export function SyncManager() {
             }
         }
         seed();
-    }, []); // Empty deps - only run on mount
+    }, [pullFromServer, updatePendingCount]);
 
     // Push pending changes to server
     const pushChanges = useCallback(async () => {
         if (!navigator.onLine) return;
 
         setIsSyncing(true);
+        setSyncError(null);
         let synced = 0;
+        let failed = 0;
 
         try {
             // 1. Sync Transactions
@@ -91,8 +147,12 @@ export function SyncManager() {
                     if (res.success) {
                         await db.transactions.update(tx.id, { sync_status: 'synced' });
                         synced++;
+                    } else {
+                        failed++;
+                        console.error("SyncManager: Transaction sync returned error", tx.id, res.error);
                     }
                 } catch (e) {
+                    failed++;
                     console.error("SyncManager: Failed to sync transaction", tx.id, e);
                 }
             }
@@ -102,10 +162,15 @@ export function SyncManager() {
             for (const cat of pendingCats) {
                 try {
                     const commitType = cat.type === 'fixed' ? 'fixed' : null;
-                    await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned);
-                    await db.categories.update(cat.id, { sync_status: 'synced' });
-                    synced++;
+                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned);
+                    if (res.success) {
+                        await db.categories.update(cat.id, { sync_status: 'synced' });
+                        synced++;
+                    } else {
+                        failed++;
+                    }
                 } catch (e) {
+                    failed++;
                     console.error("SyncManager: Failed to sync category", cat.id, e);
                 }
             }
@@ -114,33 +179,49 @@ export function SyncManager() {
             const pendingDebts = await db.debts.where('sync_status').equals('created').toArray();
             for (const debt of pendingDebts) {
                 try {
-                    await addDebt(debt.name, debt.total_balance, debt.interest_rate);
-                    await db.debts.update(debt.id, { sync_status: 'synced' });
-                    synced++;
+                    const res = await addDebt(debt.name, debt.total_balance, debt.interest_rate);
+                    if (res.success) {
+                        await db.debts.update(debt.id, { sync_status: 'synced' });
+                        synced++;
+                    } else {
+                        failed++;
+                    }
                 } catch (e) {
+                    failed++;
                     console.error("SyncManager: Failed to sync debt", debt.id, e);
                 }
             }
 
             if (synced > 0) {
                 console.log(`SyncManager: Synced ${synced} items`);
-                // Show success banner
                 setShowSuccess(true);
                 setTimeout(() => setShowSuccess(false), 3000);
             }
-        } catch (e) {
+
+            if (failed > 0) {
+                setSyncError(`${failed} items failed to sync`);
+            }
+        } catch (e: any) {
             console.error("SyncManager: Push failed", e);
+            setSyncError(e.message || "Push failed");
         } finally {
             setIsSyncing(false);
             updatePendingCount();
         }
     }, [updatePendingCount]);
 
+    // Force Full Sync (Pull + Push)
+    const forceSync = useCallback(async () => {
+        setSyncError(null);
+        await pushChanges();
+        await pullFromServer();
+    }, [pushChanges, pullFromServer]);
+
     // Online/Offline detection
     useEffect(() => {
         const handleOnline = () => {
             setIsOnline(true);
-            pushChanges(); // Auto-sync when back online
+            forceSync();
         };
         const handleOffline = () => setIsOnline(false);
 
@@ -152,23 +233,29 @@ export function SyncManager() {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, [pushChanges]);
+    }, [forceSync]);
 
-    // Periodic sync (every 30 seconds)
+    // Periodic sync (every 60 seconds)
     useEffect(() => {
         const interval = setInterval(() => {
             updatePendingCount();
-            if (navigator.onLine) pushChanges();
-        }, 30000);
+            if (navigator.onLine) {
+                pushChanges();
+                // Pull less frequently (every 2 minutes)
+                if (!lastPull || (new Date().getTime() - lastPull.getTime() > 120000)) {
+                    pullFromServer();
+                }
+            }
+        }, 60000);
         return () => clearInterval(interval);
-    }, [pushChanges, updatePendingCount]);
+    }, [pushChanges, pullFromServer, updatePendingCount, lastPull]);
 
     // Initial check
     useEffect(() => {
         updatePendingCount();
     }, [updatePendingCount]);
 
-    // Show success banner even if nothing else to show
+    // Success Banner
     if (showSuccess) {
         return (
             <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
@@ -181,31 +268,54 @@ export function SyncManager() {
     }
 
     // Don't render if online with nothing pending and not syncing
-    if (isOnline && pendingCount === 0 && !isSyncing) return null;
+    const isActive = !isOnline || pendingCount > 0 || isSyncing || isPulling || syncError;
+    if (!isActive) return null;
 
     return (
         <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${!isOnline
-                ? "bg-amber-100 text-amber-800 border border-amber-300"
-                : isSyncing
-                    ? "bg-blue-100 text-blue-800 border border-blue-300"
-                    : "bg-orange-100 text-orange-800 border border-orange-300"
-                }`}>
-                {!isOnline ? (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${
+                syncError
+                    ? "bg-red-100 text-red-800 border border-red-300"
+                    : !isOnline
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : (isSyncing || isPulling)
+                            ? "bg-blue-100 text-blue-800 border border-blue-300"
+                            : "bg-orange-100 text-orange-800 border border-orange-300"
+            }`}>
+                {syncError ? (
+                    <>
+                        <AlertCircle size={14} />
+                        <span>Sync Error</span>
+                        <button
+                            onClick={forceSync}
+                            className="ml-1 p-1 rounded-full hover:bg-red-200 transition-colors"
+                            title="Retry Sync"
+                        >
+                            <RefreshCw size={12} />
+                        </button>
+                    </>
+                ) : !isOnline ? (
                     <>
                         <CloudOff size={14} />
                         <span>Offline</span>
                         {pendingCount > 0 && <span className="opacity-70">({pendingCount} pending)</span>}
                     </>
-                ) : isSyncing ? (
+                ) : (isSyncing || isPulling) ? (
                     <>
                         <RefreshCw size={14} className="animate-spin" />
-                        <span>Syncing...</span>
+                        <span>{isPulling ? "Pulling..." : "Syncing..."}</span>
                     </>
                 ) : (
                     <>
                         <Cloud size={14} />
                         <span>{pendingCount} pending</span>
+                        <button
+                            onClick={forceSync}
+                            className="ml-1 p-1 rounded-full hover:bg-orange-200 transition-colors"
+                            title="Force Sync"
+                        >
+                            <RefreshCw size={12} />
+                        </button>
                     </>
                 )}
             </div>
