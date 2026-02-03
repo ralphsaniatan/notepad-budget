@@ -274,7 +274,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                 <div className="space-y-2">
                                     <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Category</label>
                                     <div className="relative">
-                                        <input type="text" value={categorySearch} onChange={e => { setCategorySearch(e.target.value); setTargetId(""); setIsTypeConfirmed(false); }} placeholder="Select or type new category..." autoFocus className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                        <input type="text" value={categorySearch} onChange={e => { setCategorySearch(e.target.value); setTargetId(""); setIsTypeConfirmed(false); }} placeholder="Select or type new category..." className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
 
                                         {categorySearch && !targetId && filteredCategories.length > 0 && (
                                             <div className="absolute top-full left-0 right-0 bg-white border shadow-xl z-50 max-h-40 overflow-y-auto rounded-b-xl">
@@ -325,7 +325,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                 <div className="space-y-2">
                                     <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Debt Account</label>
                                     <div className="relative">
-                                        <input type="text" value={debtSearch} onChange={e => { setDebtSearch(e.target.value); setTargetId(""); }} placeholder="Select or type new debt..." autoFocus className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                        <input type="text" value={debtSearch} onChange={e => { setDebtSearch(e.target.value); setTargetId(""); }} placeholder="Select or type new debt..." className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
 
                                         {debtSearch && !targetId && filteredDebts.length > 0 && (
                                             <div className="absolute top-full left-0 right-0 bg-white border shadow-xl z-50 max-h-40 overflow-y-auto rounded-b-xl">
