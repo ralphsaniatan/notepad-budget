@@ -20,7 +20,7 @@ export function EditTransactionSheet({
     debts: { id: string, name: string }[],
     onClose: () => void
 }) {
-    const [amount, setAmount] = useState(transaction.amount.toString());
+    const [amount, setAmount] = useState(Number(transaction.amount).toFixed(2));
     const [description, setDescription] = useState(transaction.description);
     const [targetId, setTargetId] = useState(
         transaction.type === 'expense' ? transaction.category_id :
@@ -81,8 +81,27 @@ export function EditTransactionSheet({
         }
     };
 
+    // Math Expression Evaluator
+    const evaluateMathExpression = (expr: string): number | null => {
+        try {
+            const sanitized = expr.replace(/[^0-9+\-*/.() ]/g, '');
+            if (!sanitized) return null;
+            const result = new Function('return ' + sanitized)();
+            return typeof result === 'number' && isFinite(result) ? result : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const computeAndSetAmount = () => {
+        const result = evaluateMathExpression(amount);
+        if (result !== null) {
+            setAmount(result.toFixed(2));
+        }
+    };
+
     return (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm">
             <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
 
                 {/* Header */}
@@ -94,13 +113,39 @@ export function EditTransactionSheet({
                 </div>
 
                 {/* Amount */}
-                <div className="text-center">
+                <div className="text-center space-y-2">
                     <input
-                        type="number"
+                        type="text"
+                        inputMode="text"
                         value={amount}
                         onChange={e => setAmount(e.target.value)}
-                        className="w-40 text-center text-4xl font-bold font-mono text-stone-900 outline-none border-b border-stone-200 focus:border-stone-900 transition-colors"
+                        onBlur={computeAndSetAmount}
+                        placeholder="0.00 or 50+20"
+                        className="w-48 text-center text-4xl font-bold font-mono text-stone-900 outline-none border-b-2 border-stone-200 focus:border-stone-900 transition-colors bg-transparent"
                     />
+                    {/* Math Operator Buttons */}
+                    <div className="flex justify-center gap-2">
+                        {['+', '-', '×', '÷'].map(op => (
+                            <button
+                                key={op}
+                                type="button"
+                                onClick={() => {
+                                    const symbol = op === '×' ? '*' : op === '÷' ? '/' : op;
+                                    setAmount(prev => prev + symbol);
+                                }}
+                                className="w-10 h-10 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold text-lg transition-colors"
+                            >
+                                {op}
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={computeAndSetAmount}
+                            className="w-10 h-10 rounded-lg bg-stone-800 hover:bg-stone-700 text-white font-bold text-lg transition-colors"
+                        >
+                            =
+                        </button>
+                    </div>
                 </div>
 
                 {/* Type Toggles */}

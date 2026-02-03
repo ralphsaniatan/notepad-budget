@@ -5,7 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, LocalCategory } from "@/lib/db";
 import { useState, useEffect } from "react";
 import { updateCategory } from "@/app/actions";
-import { X, Save } from "lucide-react";
+import { X, Save, Plus, Minus, Divide, Equal } from "lucide-react";
 import { toast } from "sonner";
 
 export function TrackedBudgetList() {
@@ -60,7 +60,26 @@ export function TrackedBudgetList() {
 
     const handleOpenEdit = (budget: typeof budgets[0]) => {
         setEditingBudget(budget);
-        setEditLimit(String(budget.budget_limit));
+        setEditLimit(budget.budget_limit.toFixed(2));
+    };
+
+    // Math Expression Evaluator
+    const evaluateMathExpression = (expr: string): number | null => {
+        try {
+            const sanitized = expr.replace(/[^0-9+\-*/.() ]/g, '');
+            if (!sanitized) return null;
+            const result = new Function('return ' + sanitized)();
+            return typeof result === 'number' && isFinite(result) ? result : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const computeAndSetLimit = () => {
+        const result = evaluateMathExpression(editLimit);
+        if (result !== null) {
+            setEditLimit(result.toFixed(2));
+        }
     };
 
     const handleSave = async () => {
@@ -131,7 +150,7 @@ export function TrackedBudgetList() {
                                             <span className={getStatusColor(b.status)}>
                                                 AED {Math.abs(b.remaining).toFixed(0)}
                                             </span>
-                                            <span className="text-stone-300"> / {b.budget_limit}</span>
+                                            <span className="text-stone-300"> / {b.budget_limit.toFixed(2)}</span>
                                             <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
                                                 {b.status === 'over' ? 'Over' : 'Left'}
                                             </span>
@@ -152,9 +171,8 @@ export function TrackedBudgetList() {
                 )}
             </section>
 
-            {/* Edit Budget Sheet */}
             {editingBudget && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm">
                     <div className="bg-white rounded-t-2xl p-6 pb-10 space-y-6">
                         {/* Header */}
                         <div className="flex justify-between items-center">
@@ -175,14 +193,38 @@ export function TrackedBudgetList() {
                                 Monthly Limit (AED)
                             </label>
                             <input
-                                type="number"
-                                inputMode="decimal"
+                                type="text"
+                                inputMode="text"
                                 value={editLimit}
                                 onChange={e => setEditLimit(e.target.value)}
-                                placeholder="0.00"
+                                onBlur={computeAndSetLimit}
+                                placeholder="0.00 or 100+50"
                                 autoFocus
                                 className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-3xl font-mono font-bold outline-none focus:border-stone-900 text-center"
                             />
+                            {/* Math Operator Buttons */}
+                            <div className="flex justify-center gap-2 pt-2">
+                                {['+', '-', '×', '÷'].map(op => (
+                                    <button
+                                        key={op}
+                                        type="button"
+                                        onClick={() => {
+                                            const symbol = op === '×' ? '*' : op === '÷' ? '/' : op;
+                                            setEditLimit(prev => prev + symbol);
+                                        }}
+                                        className="w-10 h-10 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold text-lg transition-colors"
+                                    >
+                                        {op}
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={computeAndSetLimit}
+                                    className="w-10 h-10 rounded-lg bg-stone-800 hover:bg-stone-700 text-white font-bold text-lg transition-colors"
+                                >
+                                    =
+                                </button>
+                            </div>
                         </div>
 
                         {/* Spent Info */}
