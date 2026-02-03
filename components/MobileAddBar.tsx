@@ -237,6 +237,23 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                     autoFocus
                                     className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-2xl font-mono font-bold outline-none focus:border-stone-900"
                                 />
+                                {/* Math Operator Quick Buttons */}
+                                <div className="flex gap-2 pt-1">
+                                    {['+', '-', '×', '÷'].map(op => (
+                                        <button
+                                            key={op}
+                                            type="button"
+                                            onClick={() => {
+                                                const symbol = op === '×' ? '*' : op === '÷' ? '/' : op;
+                                                setAmount(prev => prev + symbol);
+                                                amountRef.current?.focus();
+                                            }}
+                                            className="flex-1 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-lg transition-colors"
+                                        >
+                                            {op}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* --- EXPENSE: Category --- */}
