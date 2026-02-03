@@ -26,7 +26,7 @@ export function SyncManager() {
     // Pull Data from Server (Merge Strategy)
     const pullFromServer = useCallback(async () => {
         if (!navigator.onLine) return;
-        
+
         setIsPulling(true);
         setSyncError(null);
         console.log("SyncManager: Pulling data from server...");
@@ -143,8 +143,19 @@ export function SyncManager() {
             const pendingTxs = await db.transactions.where('sync_status').equals('created').toArray();
             for (const tx of pendingTxs) {
                 try {
-                    const res = await addTransaction(tx.amount, tx.description, tx.type, tx.category_id, tx.debt_id);
-                    if (res.success) {
+                    // Pass the original transaction date to preserve correct dating
+                    const res = await addTransaction(tx.amount, tx.description, tx.type, tx.category_id, tx.debt_id, tx.date);
+                    if (res.success && res.transactionId) {
+                        // Delete the local temp record and add with server ID
+                        await db.transactions.delete(tx.id);
+                        await db.transactions.put({
+                            ...tx,
+                            id: res.transactionId, // Use server's ID
+                            sync_status: 'synced'
+                        });
+                        synced++;
+                    } else if (res.success) {
+                        // Fallback if ID not returned
                         await db.transactions.update(tx.id, { sync_status: 'synced' });
                         synced++;
                     } else {
@@ -273,15 +284,14 @@ export function SyncManager() {
 
     return (
         <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${
-                syncError
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-bold ${syncError
                     ? "bg-red-100 text-red-800 border border-red-300"
                     : !isOnline
                         ? "bg-amber-100 text-amber-800 border border-amber-300"
                         : (isSyncing || isPulling)
                             ? "bg-blue-100 text-blue-800 border border-blue-300"
                             : "bg-orange-100 text-orange-800 border border-orange-300"
-            }`}>
+                }`}>
                 {syncError ? (
                     <>
                         <AlertCircle size={14} />

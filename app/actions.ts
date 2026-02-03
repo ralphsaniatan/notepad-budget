@@ -315,7 +315,8 @@ export async function addTransaction(
     description: string,
     type: 'expense' | 'income' | 'debt_payment',
     categoryId?: string,
-    debtId?: string
+    debtId?: string,
+    customDate?: string // Optional: ISO date string from offline sync
 ) {
     const supabase = await createClient();
 
@@ -323,9 +324,9 @@ export async function addTransaction(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // Get current month ID
-    const now = new Date();
-    const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    // Determine which month this transaction belongs to
+    const txDate = customDate ? new Date(customDate) : new Date();
+    const isoMonth = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}-01`;
 
     // We need a month record.
     let { data: month } = await supabase.from('months').select('id').eq('user_id', user.id).eq('iso_month', isoMonth).single();
@@ -343,8 +344,8 @@ export async function addTransaction(
     if (!amount || amount <= 0 || !isFinite(amount)) return { success: false, error: "Invalid amount" };
     if (description.length > 100) return { success: false, error: "Description too long (max 100 chars)" };
 
-    // 1. Insert Transaction
-    const { error } = await supabase
+    // 1. Insert Transaction and return the new ID
+    const { data: newTx, error } = await supabase
         .from('transactions')
         .insert({
             user_id: user.id,
@@ -353,8 +354,11 @@ export async function addTransaction(
             description: description.trim(),
             type,
             category_id: categoryId || null,
-            debt_id: type === 'debt_payment' ? debtId : null
-        });
+            debt_id: type === 'debt_payment' ? debtId : null,
+            date: customDate || new Date().toISOString() // Use custom date if provided
+        })
+        .select('id')
+        .single();
 
     if (error) {
         console.error("Insert Error:", error);
@@ -371,7 +375,7 @@ export async function addTransaction(
     }
 
     revalidatePath('/', 'layout'); // Global refresh
-    return { success: true };
+    return { success: true, transactionId: newTx?.id };
 }
 
 export async function closeMonth() {
@@ -392,11 +396,8 @@ export async function closeMonth() {
 
         if (!month) return { success: false, error: "Current month not found" };
 
-        // Strict Check: Cannot close current month until next month starts
-        const [y, m] = isoMonth.split('-');
-        if (now.getMonth() + 1 === parseInt(m) && now.getFullYear() === parseInt(y)) {
-            return { success: false, error: "Cannot close month until it has ended." };
-        }
+        // NOTE: Removed strict date check to allow early rollover
+        // Users can now close a month early if they receive salary before month end
 
         // Calculate Rollover: Income - Total Actual Spending
         // We do NOT deduct limits. We use strict cash flow.
