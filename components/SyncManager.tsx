@@ -220,40 +220,54 @@ export function SyncManager() {
                 }
             }
 
-            // 2. Sync Categories
-            const pendingCats = await db.categories.where('sync_status').equals('created').toArray();
-            for (const cat of pendingCats) {
-                try {
-                    const commitType = cat.type === 'fixed' ? 'fixed' : null;
-                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned);
-                    if (res.success) {
-                        await db.categories.update(cat.id, { sync_status: 'synced' });
-                        synced++;
-                    } else {
-                        failed++;
+            // 2 & 3. Sync Categories and Debts in Parallel
+            const syncCategories = async () => {
+                let localSynced = 0;
+                let localFailed = 0;
+                const pendingCats = await db.categories.where('sync_status').equals('created').toArray();
+                for (const cat of pendingCats) {
+                    try {
+                        const commitType = cat.type === 'fixed' ? 'fixed' : null;
+                        const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned);
+                        if (res.success) {
+                            await db.categories.update(cat.id, { sync_status: 'synced' });
+                            localSynced++;
+                        } else {
+                            localFailed++;
+                        }
+                    } catch (e) {
+                        localFailed++;
+                        console.error("SyncManager: Failed to sync category", cat.id, e);
                     }
-                } catch (e) {
-                    failed++;
-                    console.error("SyncManager: Failed to sync category", cat.id, e);
                 }
-            }
+                return { synced: localSynced, failed: localFailed };
+            };
 
-            // 3. Sync Debts
-            const pendingDebts = await db.debts.where('sync_status').equals('created').toArray();
-            for (const debt of pendingDebts) {
-                try {
-                    const res = await addDebt(debt.name, debt.total_balance, debt.interest_rate);
-                    if (res.success) {
-                        await db.debts.update(debt.id, { sync_status: 'synced' });
-                        synced++;
-                    } else {
-                        failed++;
+            const syncDebts = async () => {
+                let localSynced = 0;
+                let localFailed = 0;
+                const pendingDebts = await db.debts.where('sync_status').equals('created').toArray();
+                for (const debt of pendingDebts) {
+                    try {
+                        const res = await addDebt(debt.name, debt.total_balance, debt.interest_rate);
+                        if (res.success) {
+                            await db.debts.update(debt.id, { sync_status: 'synced' });
+                            localSynced++;
+                        } else {
+                            localFailed++;
+                        }
+                    } catch (e) {
+                        localFailed++;
+                        console.error("SyncManager: Failed to sync debt", debt.id, e);
                     }
-                } catch (e) {
-                    failed++;
-                    console.error("SyncManager: Failed to sync debt", debt.id, e);
                 }
-            }
+                return { synced: localSynced, failed: localFailed };
+            };
+
+            const [catResults, debtResults] = await Promise.all([syncCategories(), syncDebts()]);
+
+            synced += catResults.synced + debtResults.synced;
+            failed += catResults.failed + debtResults.failed;
 
             if (synced > 0) {
                 console.log(`SyncManager: Synced ${synced} items`);
