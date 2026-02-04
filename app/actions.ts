@@ -254,23 +254,27 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
     const now = new Date();
     const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // 1. Get Pinned Categories
-    const { data: categories } = await supabase
-        .from('categories')
-        .select('id, name, budget_limit')
-        .eq('user_id', user.id)
-        .eq('is_pinned', true);
+    // 1. Get Pinned Categories and Current Month in parallel
+    const [
+        { data: categories },
+        { data: month }
+    ] = await Promise.all([
+        supabase
+            .from('categories')
+            .select('id, name, budget_limit')
+            .eq('user_id', user.id)
+            .eq('is_pinned', true),
+        supabase
+            .from('months')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('iso_month', isoMonth)
+            .single()
+    ]);
 
     if (!categories || categories.length === 0) return [];
 
     // 2. Get Spending for these categories in current month
-    // We need the month ID first
-    const { data: month } = await supabase
-        .from('months')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('iso_month', isoMonth)
-        .single();
 
     if (!month) return categories.map(c => ({
         id: c.id, name: c.name, limit: Number(c.budget_limit), spent: 0, remaining: Number(c.budget_limit), status: 'ok', percent: 0
