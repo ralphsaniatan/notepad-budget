@@ -40,13 +40,62 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
         const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-        // Fetch or Create Month
-        let { data: month } = await supabase
-            .from('months')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('iso_month', isoMonth)
-            .single();
+        // Parallelize Database Requests
+        const [
+            monthRes,
+            transactionsRes,
+            committedCategoriesRes,
+            debtsRes,
+            categoriesRes
+        ] = await Promise.all([
+            // 1. Fetch Month
+            supabase
+                .from('months')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('iso_month', isoMonth)
+                .single(),
+
+            // 2. Fetch Transactions
+            supabase
+                .from('transactions')
+                .select(`
+                    *,
+                    categories ( name, is_commitment, commitment_type ),
+                    debts ( name )
+                `)
+                .eq('user_id', user.id)
+                .gte('date', isoMonth)
+                .order('date', { ascending: false })
+                .order('created_at', { ascending: false }),
+
+            // 3. Fetch Commitments
+            supabase
+                .from('categories')
+                .select('id, budget_limit, is_pinned')
+                .eq('user_id', user.id)
+                .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true'),
+
+            // 4. Fetch Debts
+            supabase
+                .from('debts')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('total_balance', { ascending: false }),
+
+            // 5. Fetch Dropdown Categories
+            supabase
+                .from('categories')
+                .select('id, name')
+                .eq('user_id', user.id)
+                .order('name')
+        ]);
+
+        const { data: month } = monthRes;
+        const { data: allTransactions } = transactionsRes;
+        const { data: committedCategories } = committedCategoriesRes;
+        const { data: debts } = debtsRes;
+        const { data: categories } = categoriesRes;
 
         // Safety Helper
         const safeNum = (val: any) => {
@@ -57,19 +106,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // 2. Data Aggregation
         let income = safeNum(month?.income);
         const rollover = safeNum(month?.rollover);
-
-        // Get recent transactions for the list
-        const { data: allTransactions } = await supabase
-            .from('transactions')
-            .select(`
-                *,
-                categories ( name, is_commitment, commitment_type ),
-                debts ( name )
-            `)
-            .eq('user_id', user.id)
-            .gte('date', isoMonth) // Only current month transactions for calculations
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false });
 
         const transactions = allTransactions || [];
 
@@ -103,13 +139,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             }
         });
 
-        // 3. Get Commitments & Calculate Overspend
-        const { data: committedCategories } = await supabase
-            .from('categories')
-            .select('id, budget_limit, is_pinned') // Fetch ID for matching
-            .eq('user_id', user.id)
-            .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
-
         let totalCommitments = 0;
 
         committedCategories?.forEach(cat => {
@@ -126,20 +155,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // Notice: 'Overspend' is the amount EXCEEDING the envelope. 
         // The first 'limit' amount was already deducted via 'totalCommitments'.
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
-
-        // 4. Get Debts
-        const { data: debts } = await supabase
-            .from('debts')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('total_balance', { ascending: false });
-
-        // 5. Get Categories for Dropdown (non-commitment)
-        const { data: categories } = await supabase
-            .from('categories')
-            .select('id, name')
-            .eq('user_id', user.id)
-            .order('name');
 
         // Map transactions for UI
         const recentTransactions = transactions.map((tx: any) => {
