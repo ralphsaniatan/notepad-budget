@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { signOut } from "@/app/auth/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
 import clsx from "clsx";
@@ -33,6 +33,11 @@ export function DashboardClient({ initialData }: DashboardData) {
     const transactions = useLiveQuery(() => db.transactions.orderBy('date').reverse().toArray()) || [];
     const categories = useLiveQuery(() => db.categories.toArray()) || [];
     const debts = useLiveQuery(() => db.debts.toArray()) || [];
+
+    // Optimization: Create a map for O(1) category lookups
+    const categoryMap = useMemo(() => {
+        return new Map(categories.map(c => [c.id, c.name]));
+    }, [categories]);
 
     // Pagination State (Client-side slicing of local data)
     const [limit, setLimit] = useState(10);
@@ -313,7 +318,7 @@ export function DashboardClient({ initialData }: DashboardData) {
                                 <>
                                     {displayTransactions.map((tx) => {
                                         // Enrich Category Name
-                                        const catName = categories.find(c => c.id === tx.category_id)?.name;
+                                        const catName = tx.category_id != null ? categoryMap.get(tx.category_id) : undefined;
 
                                         return (
                                             <div
