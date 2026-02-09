@@ -59,6 +59,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
     // Category Creation State
     const [newCatType, setNewCatType] = useState<CatType>('wants');
     const [newCatBudget, setNewCatBudget] = useState("");
+    const [newCatFrequency, setNewCatFrequency] = useState(1);
     const [isPinned, setIsPinned] = useState(false);
     const [isTypeConfirmed, setIsTypeConfirmed] = useState(false);
 
@@ -79,6 +80,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
         const currentNewCatBudget = newCatBudget;
         const currentIsPinned = isPinned;
         const currentNewDebtBalance = newDebtBalance;
+        const currentNewCatFrequency = newCatFrequency;
 
         // --- INSTANT UI: Close modal and reset immediately ---
         setAmount("");
@@ -89,6 +91,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
         setNewCatType('wants');
         setNewCatBudget("");
         setIsPinned(false);
+        setNewCatFrequency(1);
         setIsTypeConfirmed(false);
         setNewDebtBalance("");
         setType('expense');
@@ -111,9 +114,10 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         await db.categories.add({
                             id: newCatId,
                             name: newCatName,
-                            budget_limit: budgetLimit,
+                            budget_limit: budgetLimit / currentNewCatFrequency,
                             type: isFixed ? 'fixed' : 'variable',
                             is_pinned: currentIsPinned,
+                            frequency_months: currentNewCatFrequency,
                             user_id: 'unknown',
                             sync_status: 'created'
                         });
@@ -123,7 +127,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         if (currentNewCatType === 'needs') serverCommitmentType = 'variable_fixed';
 
                         // Sync to server and mark as synced to prevent duplicate
-                        addCategory(newCatName, serverCommitmentType, budgetLimit, currentIsPinned)
+                        addCategory(newCatName, serverCommitmentType, budgetLimit / currentNewCatFrequency, currentIsPinned, currentNewCatFrequency)
                             .then(() => db.categories.update(newCatId, { sync_status: 'synced' }))
                             .catch(console.error);
                         finalTargetId = newCatId;
@@ -309,11 +313,31 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                                     <button onClick={() => setIsTypeConfirmed(false)} className="text-xs font-bold text-blue-500 hover:text-blue-700">Change</button>
                                                 </div>
                                             </div>
-                                            <div className="space-y-2">
-                                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                                    {newCatType === 'fixed' ? 'Fixed Amount (AED)' : 'Monthly Limit (AED)'}
-                                                </label>
-                                                <input type="number" placeholder="0.00" inputMode="decimal" step="0.01" value={newCatBudget} onChange={e => setNewCatBudget(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                            <div className="space-y-4">
+                                                {/* Only show frequency for Fixed/Needs */}
+                                                {(newCatType === 'fixed' || newCatType === 'needs') && (
+                                                    <div className="space-y-2">
+                                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
+                                                        <select
+                                                            value={newCatFrequency}
+                                                            onChange={e => setNewCatFrequency(Number(e.target.value))}
+                                                            className="w-full p-3 bg-stone-50 border-b-2 border-stone-200 text-sm font-bold outline-none focus:border-stone-900 rounded-lg"
+                                                        >
+                                                            <option value={1}>Monthly</option>
+                                                            <option value={2}>Every 2 Months</option>
+                                                            <option value={3}>Every 3 Months</option>
+                                                            <option value={6}>Every 6 Months</option>
+                                                            <option value={12}>Yearly</option>
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                <div className="space-y-2">
+                                                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
+                                                        {newCatFrequency > 1 ? 'Total Bill Amount (AED)' : (newCatType === 'fixed' ? 'Fixed Amount (AED)' : 'Monthly Limit (AED)')}
+                                                    </label>
+                                                    <input type="number" placeholder="0.00" inputMode="decimal" step="0.01" value={newCatBudget} onChange={e => setNewCatBudget(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                                </div>
                                             </div>
                                         </div>
                                     )}

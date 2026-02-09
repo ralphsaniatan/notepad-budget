@@ -213,7 +213,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                 </div>
                             )}
 
-                            {selectedType === 'fixed' && (
+                            {(selectedType === 'fixed' || selectedType === 'needs') && (
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <div className="flex justify-between">
@@ -238,7 +238,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                            {frequency > 1 ? "Total Bill Amount (AED)" : "Fixed Amount (AED)"}
+                                            {frequency > 1 ? "Total Bill Amount (AED)" : (selectedType === 'fixed' ? "Fixed Amount (AED)" : "Monthly Limit (AED)")}
                                         </label>
                                         <input
                                             type="number"
@@ -460,7 +460,7 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                     {commitmentType && (
                         <div className="space-y-4 animate-in slide-in-from-top-1 fade-in duration-200">
                             {/* Frequency Selector */}
-                            {commitmentType === 'fixed' && (
+                            {(commitmentType === 'fixed' || commitmentType === 'variable_fixed') && (
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
                                         <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
@@ -486,7 +486,7 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
 
                             <div className="space-y-2">
                                 <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                    {frequency > 1 ? "Total Bill Amount (AED)" : "Budget Limit (AED)"}
+                                    {frequency > 1 ? "Total Bill Amount (AED)" : (commitmentType === 'fixed' ? "Fixed Amount (AED)" : "Monthly Limit (AED)")}
                                 </label>
                                 <input
                                     type="number"
