@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
-import { Plus, X, Pencil } from "lucide-react";
-import { addDebt } from "@/app/actions";
+import { Plus, X, Pencil, CreditCard } from "lucide-react";
+import { addDebt, addTransaction, updateDebt, deleteDebt } from "@/app/actions";
 import clsx from "clsx";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
 
 type Debt = {
     id: string;
@@ -14,10 +17,13 @@ type Debt = {
 };
 
 export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
-    const [debts, setDebts] = useState<Debt[]>(initialDebts);
+    // 1. Live Query for Real-time Updates
+    const debts = useLiveQuery(() => db.debts.toArray()) || initialDebts;
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
+    const [payDebt, setPayDebt] = useState<Debt | null>(null);
 
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
@@ -27,62 +33,127 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
         if (!name || isNaN(balance)) return;
 
         setIsSubmitting(true);
-        // Optimistic
-        const newDebt = {
-            id: Math.random().toString(),
-            name,
-            total_balance: balance,
-            interest_rate: 0
-        };
-        setDebts(prev => [newDebt, ...prev]);
-        setShowAddForm(false);
-
         try {
+            // Local
+            const newDebt = {
+                id: crypto.randomUUID(),
+                name,
+                total_balance: balance,
+                interest_rate: 0,
+                user_id: 'unknown',
+                sync_status: 'created' as const
+            };
+            await db.debts.add(newDebt);
+            setShowAddForm(false);
+
+            // Server
             await addDebt(name, balance, 0);
         } catch (err) {
             console.error("Failed to add debt", err);
+            toast.error("Failed to add debt");
         } finally {
             setIsSubmitting(false);
         }
     };
+
+    const handlePay = async (amountStr: string) => {
+        if (!payDebt) return;
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) return;
+
+        setIsSubmitting(true);
+        try {
+            // 1. Local Transaction
+            const tx = {
+                id: crypto.randomUUID(),
+                description: `Payment for ${payDebt.name}`,
+                amount: amount,
+                type: 'debt_payment' as const,
+                debt_id: payDebt.id,
+                date: new Date().toISOString(),
+                user_id: 'unknown',
+                created_at: new Date().toISOString(),
+                sync_status: 'created' as const
+            };
+            await db.transactions.add(tx);
+
+            // 2. Local Debt Update
+            const newBalance = payDebt.total_balance - amount;
+            await db.debts.update(payDebt.id, {
+                total_balance: newBalance,
+                sync_status: 'updated'
+            });
+
+            setPayDebt(null);
+            toast.success(`Paid ${currency(amount)} to ${payDebt.name}`);
+
+            // 3. Server Action
+            // addTransaction handles the debt balance update on server too
+            await addTransaction(amount, `Payment for ${payDebt.name}`, 'debt_payment', undefined, payDebt.id);
+
+        } catch (err) {
+            console.error("Pay Error", err);
+            toast.error("Failed to record payment");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
 
     return (
         <section className="space-y-6 pb-32">
             {/* List */}
             {debts.length === 0 && !showAddForm && (
                 <PaperCard className="opacity-50 border-dashed p-8 text-center bg-stone-50/50">
+                    <CreditCard className="mx-auto mb-2 text-stone-300" size={32} />
                     <p className="text-stone-400 text-sm">No debts tracked. Freedom!</p>
                 </PaperCard>
             )}
 
             <div className="space-y-4">
                 {debts.map(debt => (
-                    <PaperCard key={debt.id} className="relative group p-6 hover:shadow-md cursor-pointer transition-shadow" >
-                        <div className="flex flex-col gap-2" onClick={() => setEditingDebt(debt)}>
+                    <PaperCard key={debt.id} className="relative group p-6 hover:shadow-md transition-all" >
+                        <div className="flex flex-col gap-4">
+                            {/* Header */}
                             <div className="flex justify-between items-start">
                                 <h4 className={clsx("font-bold text-stone-900 text-xl break-words max-w-[70%]", debt.total_balance <= 0 && "line-through decoration-red-600 decoration-4 -rotate-2 opacity-60")}>{debt.name}</h4>
-                                <button onClick={(e) => { e.stopPropagation(); setEditingDebt(debt); }} className="text-stone-300 hover:text-stone-600 px-2 py-1 rounded hover:bg-stone-50 transition-colors">
+                                <button onClick={() => setEditingDebt(debt)} className="text-stone-300 hover:text-stone-600 px-2 py-1 rounded hover:bg-stone-50 transition-colors">
                                     <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
                                 </button>
                             </div>
 
-                            <div className="text-right pt-2">
-                                <div className={clsx("text-3xl font-mono font-bold", debt.total_balance <= 0 ? "text-stone-300" : "text-stone-800")}>{currency(debt.total_balance)}</div>
-                                <div className="text-[10px] text-stone-300 uppercase tracking-widest mt-1">Outstanding</div>
+                            {/* Balance Display */}
+                            <div className="flex justify-between items-end">
+                                <div className="text-[10px] uppercase font-bold tracking-widest text-stone-400 mb-1">Outstanding Balance</div>
+                                <div className={clsx("text-3xl font-mono font-bold", debt.total_balance <= 0 ? "text-stone-300" : "text-stone-800")}>
+                                    {currency(debt.total_balance)}
+                                </div>
                             </div>
+
+                            {/* Action Bar */}
+                            {debt.total_balance > 0 && (
+                                <div className="pt-2">
+                                    <button
+                                        onClick={() => setPayDebt(debt)}
+                                        className="w-full bg-stone-900 text-white text-xs font-bold px-4 py-3 rounded-lg hover:bg-black transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <CreditCard size={14} /> Pay / Reduce Balance
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </PaperCard>
                 ))}
             </div>
 
-            {/* Persistent Floating Add Button (Pill Style) */}
-            {!showAddForm && !editingDebt && (
+            {/* Persistent Floating Add Button */}
+            {!showAddForm && !editingDebt && !payDebt && (
                 <div className="fixed bottom-6 right-6 z-40">
                     <button
                         onClick={() => setShowAddForm(true)}
                         className="bg-stone-900 text-white shadow-xl px-6 py-4 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-black transition-transform active:scale-95"
                     >
-                        <Plus size={20} /> Add Debt
+                        <Plus size={20} /> Metric Debt
                     </button>
                 </div>
             )}
@@ -99,15 +170,27 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
                 <EditDebtSheet
                     debt={editingDebt}
                     onClose={() => setEditingDebt(null)}
-                    onUpdate={(updated) => {
-                        setDebts(prev => prev.map(d => d.id === updated.id ? updated : d));
+                    onUpdate={async (updated) => {
+                        // Local update triggered by component, but we should do it cleanly
+                        // Actually EditDebtSheet below handles the action, we just close
                         setEditingDebt(null);
                     }}
                     onDelete={(id) => {
-                        setDebts(prev => prev.filter(d => d.id !== id));
                         setEditingDebt(null);
                     }}
                 />
+            )}
+
+            {/* Pay Modal */}
+            {payDebt && (
+                <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <PayDebtForm
+                        debt={payDebt}
+                        onPay={handlePay}
+                        onClose={() => setPayDebt(null)}
+                        isSubmitting={isSubmitting}
+                    />
+                </div>
             )}
         </section>
     );
@@ -160,7 +243,43 @@ function AddDebtForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, b: s
     )
 }
 
-import { updateDebt, deleteDebt } from "@/app/actions";
+function PayDebtForm({ debt, onPay, onClose, isSubmitting }: { debt: Debt, onPay: (a: string) => void, onClose: () => void, isSubmitting: boolean }) {
+    const [amount, setAmount] = useState("");
+
+    return (
+        <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center">
+                <h2 className="text-lg font-bold text-stone-900">Pay {debt.name}</h2>
+                <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
+                    <X size={20} />
+                </button>
+            </div>
+
+            <p className="text-sm text-stone-500">
+                This will record a <strong>Debt Payment</strong> transaction and reduce your outstanding balance.
+            </p>
+
+            <div className="space-y-2">
+                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Amount (AED)</label>
+                <input
+                    type="number" placeholder="0.00"
+                    autoFocus
+                    value={amount} onChange={e => setAmount(e.target.value)}
+                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                />
+            </div>
+
+            <button
+                onClick={() => onPay(amount)}
+                disabled={isSubmitting || !amount}
+                className="w-full bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95"
+            >
+                Confirm Payment
+            </button>
+        </div>
+    )
+}
+
 
 function EditDebtSheet({ debt, onClose, onUpdate, onDelete }: { debt: Debt, onClose: () => void, onUpdate: (d: Debt) => void, onDelete: (id: string) => void }) {
     const [name, setName] = useState(debt.name);
@@ -170,7 +289,17 @@ function EditDebtSheet({ debt, onClose, onUpdate, onDelete }: { debt: Debt, onCl
     const handleSave = async () => {
         setIsSubmitting(true);
         const b = parseFloat(balance) || 0;
-        await updateDebt(debt.id, name, b, 0); // Always 0 rate
+
+        // Local Update
+        await db.debts.update(debt.id, {
+            name,
+            total_balance: b,
+            sync_status: 'updated'
+        });
+
+        // Server Update
+        await updateDebt(debt.id, name, b, 0);
+
         onUpdate({ ...debt, name, total_balance: b, interest_rate: 0 });
         setIsSubmitting(false);
     };
@@ -178,7 +307,13 @@ function EditDebtSheet({ debt, onClose, onUpdate, onDelete }: { debt: Debt, onCl
     const handleDelete = async () => {
         if (!confirm("Stop tracking this debt? History will remain but it will be removed from this list.")) return;
         setIsSubmitting(true);
+
+        // Local Delete
+        await db.debts.delete(debt.id);
+
+        // Server Delete
         await deleteDebt(debt.id);
+
         onDelete(debt.id);
         setIsSubmitting(false);
     };
