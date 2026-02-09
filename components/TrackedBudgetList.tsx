@@ -167,7 +167,7 @@ export function TrackedBudgetList() {
                                         </div>
                                         <div className="text-right font-mono text-xs font-bold">
                                             <span className={getStatusColor(b.status)}>
-                                                AED {Math.abs(b.remaining).toFixed(0)}
+                                                AED {Math.abs(b.remaining).toFixed(2)}
                                             </span>
                                             {/* <span className="text-stone-300"> / {b.totalAvailable.toFixed(2)}</span> */}
                                             <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
