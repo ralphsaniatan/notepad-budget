@@ -95,7 +95,12 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
                         commitmentSpending[catId] = (commitmentSpending[catId] || 0) + amount;
                     }
                 } else {
-                    spentVariable += amount;
+                    // Start with variable spending
+                    // CRITICAL: If paid via Debt (Credit Card), it does NOT reduce Safe-to-Spend (Cash).
+                    // Only count if debt_id is NULL.
+                    if (!tx.debt_id) {
+                        spentVariable += amount;
+                    }
                 }
             }
             else if (tx.type === 'debt_payment') {
@@ -128,6 +133,34 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
             // Calculate Overspend: Max(0, Actual - IsAvailable)
             // Available = Limit (this month) + Balance (saved)
+            // Note: Commitment spending via Credit Card DOES count towards overspend of the category limit,
+            // even if it doesn't reduce cash safe-to-spend immediately.
+            // Wait - if I overspend my Grocery budget using a Credit Card, does it affect Safe to Spend?
+            // "Overspend penalty" reduces Safe to Spend.
+            // If I overspend via CC, I have created a DEBT. I haven't used extra CASH.
+            // So arguably, Overspend via CC should NOT reduce Safe-to-Spend either?
+            // But if I treat "Safe to Spend" as "Free Cash", and I overspend a commitment, I usually have to cover it.
+            // Let's stick to simplest Cash Flow view:
+            // Safe to Spend = Cash Available.
+            // Credit Card spending = Debt Increase.
+            // So CC spending should NEVER reduce Safe to Spend, even if it causes a category overspend.
+            // ...This gets complex. For now, let's assume Commitments are tracked regardless of source for LIMITS,
+            // but for the "Overspend Penalty" (deduction from Safe to Spend), we should only deduct CASH overspend?
+            // Or maybe the Penalty represents "You need to cover this".
+            // Let's keep existing overspend logic for now (it uses 'actual' which includes CC spending if I don't filter it).
+            // 'commitmentSpending' above currently includes CC spending because I didn't filter it there.
+            // Detailed Check:
+            // Lines 89-96 above track commitment spending. I did NOT filter by debt_id there.
+            // So 'actual' includes CC.
+            // Then 'overspend' is calculated.
+            // Then 'overspend' fails safe-to-spend.
+            // If I buy $500 groceries on CC (Limit $400), Overspend is $100.
+            // Safe to Spend reduces by $100.
+            // Result: I have $100 less "Free Cash" to ensure I can pay that CC bill later?
+            // Ideally yes. YNAB style: you move money to cover the overspend.
+            // So leaving 'overspend' to include CC is PROBABLY safer/better.
+            // BUT 'spentVariable' (Wants) clearly shouldn't include CC. I fixed that above.
+
             const available = limit + (freq > 1 ? balance : 0);
 
             const actual = commitmentSpending[cat.id] || 0;
@@ -382,7 +415,7 @@ export async function addTransaction(
             description: description.trim(),
             type,
             category_id: categoryId || null,
-            debt_id: type === 'debt_payment' ? debtId : null,
+            debt_id: debtId || null, // Handles both payments and credit card expenses
             date: customDate || new Date().toISOString() // Use custom date if provided
         })
         .select('id')
@@ -393,11 +426,20 @@ export async function addTransaction(
         return { success: false, error: error.message };
     }
 
-    // 2. If Debt Payment, Decrement Debt Balance
-    if (type === 'debt_payment' && debtId) {
+    // 2. Handle Debt Balances
+    if (debtId) {
         const { data: debt } = await supabase.from('debts').select('total_balance').eq('id', debtId).single();
         if (debt) {
-            const newBalance = Number(debt.total_balance) - amount;
+            let newBalance = Number(debt.total_balance);
+
+            if (type === 'debt_payment') {
+                // Payment REDUCES debt
+                newBalance -= amount;
+            } else if (type === 'expense') {
+                // Spending INCREASES debt
+                newBalance += amount;
+            }
+
             await supabase.from('debts').update({ total_balance: newBalance }).eq('id', debtId);
         }
     }

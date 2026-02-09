@@ -103,7 +103,7 @@ export function DashboardClient({ initialData }: DashboardData) {
     const currency = (val: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'AED' }).format(val);
 
-    const handleQuickAdd = async (type: TxType, amountStr: string, targetId?: string, description?: string) => {
+    const handleQuickAdd = async (type: TxType, amountStr: string, targetId?: string, description?: string, debtId?: string) => {
         if (!amountStr) return;
         const amount = parseFloat(amountStr);
         if (isNaN(amount) || amount <= 0) return;
@@ -120,7 +120,7 @@ export function DashboardClient({ initialData }: DashboardData) {
                 type,
                 date: new Date().toISOString(),
                 category_id: type !== 'debt_payment' ? targetId : undefined,
-                debt_id: type === 'debt_payment' ? targetId : undefined,
+                debt_id: type === 'debt_payment' ? targetId : debtId, // Use debtId for CC expenses
                 user_id: 'unknown',
                 created_at: new Date().toISOString(),
                 sync_status: 'created' as const
@@ -128,8 +128,19 @@ export function DashboardClient({ initialData }: DashboardData) {
 
             await db.transactions.add(newTx);
 
+            // Optimistic update for Debt Balance (Credit Card Spending)
+            if (type === 'expense' && debtId) {
+                const debt = debts.find(d => d.id === debtId);
+                if (debt) {
+                    await db.debts.update(debtId, {
+                        total_balance: Number(debt.total_balance) + amount,
+                        sync_status: 'updated'
+                    });
+                }
+            }
+
             // 2. Trigger Server Action (Hybrid Sync)
-            const result = await addTransaction(amount, description || "", type, targetId, targetId);
+            const result = await addTransaction(amount, description || "", type, targetId, type === 'debt_payment' ? targetId : debtId);
 
             // 3. CRITICAL: Mark as synced to prevent SyncManager creating duplicate
             if (result?.success) {
@@ -314,6 +325,8 @@ export function DashboardClient({ initialData }: DashboardData) {
                                     {displayTransactions.map((tx) => {
                                         // Enrich Category Name
                                         const catName = categories.find(c => c.id === tx.category_id)?.name;
+                                        // Enrich Debt Name (for payments OR credit card spends)
+                                        const debtName = tx.debt_id ? debts.find(d => d.id === tx.debt_id)?.name : undefined;
 
                                         return (
                                             <div
@@ -326,6 +339,14 @@ export function DashboardClient({ initialData }: DashboardData) {
                                                     <div className="text-[10px] text-stone-400 font-mono uppercase flex items-center gap-1">
                                                         <span>{new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                                         {tx.type === 'debt_payment' && <span className="bg-blue-100 text-blue-600 px-1 rounded ml-1">Debt Pmt</span>}
+
+                                                        {/* Badge for Credit Card Spending */}
+                                                        {tx.type === 'expense' && tx.debt_id && (
+                                                            <span className="bg-red-100 text-red-600 px-1 rounded ml-1 flex items-center gap-0.5">
+                                                                Credit: {debtName || 'Debt'}
+                                                            </span>
+                                                        )}
+
                                                         {catName && tx.type !== 'debt_payment' ? <span className="text-stone-300">• {catName}</span> : ''}
                                                     </div>
                                                 </div>
@@ -390,7 +411,7 @@ export function DashboardClient({ initialData }: DashboardData) {
             {/* Persistent Mobile Add Bar */}
             <MobileAddBar
                 categories={categories}
-                debts={debts.filter(d => d.total_balance > 0)}
+                debts={debts}
                 onAdd={handleQuickAdd}
                 isSubmitting={isSubmitting}
             />
