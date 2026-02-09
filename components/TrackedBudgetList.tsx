@@ -169,7 +169,7 @@ export function TrackedBudgetList() {
                                             <span className={getStatusColor(b.status)}>
                                                 AED {Math.abs(b.remaining).toFixed(0)}
                                             </span>
-                                            <span className="text-stone-300"> / {b.totalAvailable.toFixed(2)}</span>
+                                            {/* <span className="text-stone-300"> / {b.totalAvailable.toFixed(2)}</span> */}
                                             <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
                                                 {b.status === 'over' ? 'Over' : 'Left'}
                                             </span>
