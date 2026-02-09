@@ -19,6 +19,7 @@ type Category = {
     is_commitment: boolean;
     budget_limit: number;
     is_pinned?: boolean;
+    frequency_months?: number;
 };
 
 export function CategoriesClient({ initialCategories }: { initialCategories: Category[] }) {
@@ -29,6 +30,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
     const [searchValue, setSearchValue] = useState("");
     const [selectedType, setSelectedType] = useState<CatType | null>(null);
     const [budgetLimit, setBudgetLimit] = useState("");
+    const [frequency, setFrequency] = useState(1);
     const [isPinned, setIsPinned] = useState(false);
 
     // Bulk Delete State
@@ -62,8 +64,9 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
             name,
             commitment_type: commitmentType,
             is_commitment: !!commitmentType,
-            budget_limit: limit,
-            is_pinned: isPinned
+            budget_limit: limit / frequency, // Store monthly limit
+            is_pinned: isPinned,
+            frequency_months: frequency
         };
         setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
 
@@ -71,10 +74,11 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
         setSearchValue("");
         setSelectedType(null);
         setBudgetLimit("");
+        setFrequency(1);
         setIsPinned(false);
 
         try {
-            await addCategory(name, commitmentType, limit, isPinned);
+            await addCategory(name, commitmentType, limit / frequency, isPinned, frequency);
             toast.success("Category created");
         } catch (err) {
             console.error(err);
@@ -209,17 +213,41 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                 </div>
                             )}
 
-                            {/* Budget Limit for fixed */}
                             {selectedType === 'fixed' && (
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Fixed Amount (AED)</label>
-                                    <input
-                                        type="number"
-                                        placeholder="0"
-                                        value={budgetLimit}
-                                        onChange={e => setBudgetLimit(e.target.value)}
-                                        className="w-full p-4 bg-white border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
-                                    />
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
+                                            {frequency > 1 && (
+                                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                                    Monthly Cost: {currency((parseFloat(budgetLimit) || 0) / frequency)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <select
+                                            value={frequency}
+                                            onChange={e => setFrequency(Number(e.target.value))}
+                                            className="w-full p-4 bg-white border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900 appearance-none"
+                                        >
+                                            <option value={1}>Monthly</option>
+                                            <option value={2}>Every 2 Months</option>
+                                            <option value={3}>Every 3 Months (Quarterly)</option>
+                                            <option value={6}>Every 6 Months</option>
+                                            <option value={12}>Yearly</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
+                                            {frequency > 1 ? "Total Bill Amount (AED)" : "Fixed Amount (AED)"}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            value={budgetLimit}
+                                            onChange={e => setBudgetLimit(e.target.value)}
+                                            className="w-full p-4 bg-white border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                                        />
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -297,6 +325,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                 {type === 'fixed' && (
                                     <span className="inline-block mt-1 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
                                         Fixed: {currency(cat.budget_limit)}
+                                        {cat.frequency_months && cat.frequency_months > 1 && ` / mo (Every ${cat.frequency_months}m)`}
                                     </span>
                                 )}
                                 {type === 'variable_fixed' && (
@@ -345,21 +374,23 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
     const [name, setName] = useState(category.name);
     const initialType = category.commitment_type || (category.is_commitment ? 'fixed' : null);
     const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
-    const [budgetLimit, setBudgetLimit] = useState(category.budget_limit.toString());
+    const [budgetLimit, setBudgetLimit] = useState((category.budget_limit * (category.frequency_months || 1)).toString());
+    const [frequency, setFrequency] = useState(category.frequency_months || 1);
     const [isPinned, setIsPinned] = useState(category.is_pinned || false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSave = async () => {
         setIsSubmitting(true);
         const limit = parseFloat(budgetLimit) || 0;
-        await updateCategory(category.id, name, commitmentType, limit, isPinned);
+        await updateCategory(category.id, name, commitmentType, limit / frequency, isPinned, frequency);
         onUpdate({
             ...category,
             name,
             commitment_type: commitmentType,
             is_commitment: !!commitmentType,
-            budget_limit: limit,
-            is_pinned: isPinned
+            budget_limit: limit / frequency,
+            is_pinned: isPinned,
+            frequency_months: frequency
         });
         toast.success("Category updated");
         setIsSubmitting(false);
@@ -427,13 +458,42 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                     </label>
 
                     {commitmentType && (
-                        <div className="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200">
-                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Budget Limit (AED)</label>
-                            <input
-                                type="number"
-                                value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
-                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
-                            />
+                        <div className="space-y-4 animate-in slide-in-from-top-1 fade-in duration-200">
+                            {/* Frequency Selector */}
+                            {commitmentType === 'fixed' && (
+                                <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
+                                        {frequency > 1 && (
+                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                                Monthly: {currency((parseFloat(budgetLimit) || 0) / frequency)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <select
+                                        value={frequency}
+                                        onChange={e => setFrequency(Number(e.target.value))}
+                                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900 appearance-none"
+                                    >
+                                        <option value={1}>Monthly</option>
+                                        <option value={2}>Every 2 Months</option>
+                                        <option value={3}>Every 3 Months (Quarterly)</option>
+                                        <option value={6}>Every 6 Months</option>
+                                        <option value={12}>Yearly</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
+                                    {frequency > 1 ? "Total Bill Amount (AED)" : "Budget Limit (AED)"}
+                                </label>
+                                <input
+                                    type="number"
+                                    value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
+                                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                                />
+                            </div>
                         </div>
                     )}
                 </div>

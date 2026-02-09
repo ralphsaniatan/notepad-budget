@@ -42,8 +42,18 @@ export function TrackedBudgetList() {
             .reduce((sum, t) => sum + Number(t.amount), 0);
 
         const limit = Number(cat.budget_limit);
-        const remaining = limit - spent;
-        const percent = limit > 0 ? (spent / limit) * 100 : 0;
+        const freq = cat.frequency_months || 1;
+        const balance = cat.balance || 0;
+
+        // Custom logic for frequency categories
+        let remaining = limit - spent;
+        if (freq > 1) {
+            // Available = Balance + This Month's Contribution
+            remaining = (balance + limit) - spent;
+        }
+
+        const totalAvailable = freq > 1 ? (limit + balance) : limit;
+        const percent = totalAvailable > 0 ? (spent / totalAvailable) * 100 : 0;
 
         let status: 'ok' | 'warning' | 'over' = 'ok';
         if (remaining < 0) status = 'over';
@@ -54,7 +64,8 @@ export function TrackedBudgetList() {
             spent,
             remaining,
             percent,
-            status
+            status,
+            totalAvailable
         };
     });
 
@@ -98,7 +109,8 @@ export function TrackedBudgetList() {
                 editingBudget.name,
                 editingBudget.type === 'fixed' ? 'fixed' : null,
                 newLimit,
-                editingBudget.is_pinned
+                editingBudget.is_pinned,
+                editingBudget.frequency_months || 1
             );
 
             if (res.success) {
@@ -145,12 +157,19 @@ export function TrackedBudgetList() {
                             >
                                 <PaperCard className="p-3 space-y-2 border-l-4 border-l-stone-900 transition-all hover:bg-stone-50 active:scale-[0.98] cursor-pointer">
                                     <div className="flex justify-between items-end">
-                                        <h3 className="font-bold text-stone-900 text-sm">{b.name}</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-bold text-stone-900 text-sm">{b.name}</h3>
+                                            {b.frequency_months && b.frequency_months > 1 && (
+                                                <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                                    Every {b.frequency_months}m
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="text-right font-mono text-xs font-bold">
                                             <span className={getStatusColor(b.status)}>
                                                 AED {Math.abs(b.remaining).toFixed(0)}
                                             </span>
-                                            <span className="text-stone-300"> / {b.budget_limit.toFixed(2)}</span>
+                                            <span className="text-stone-300"> / {b.totalAvailable.toFixed(2)}</span>
                                             <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
                                                 {b.status === 'over' ? 'Over' : 'Left'}
                                             </span>

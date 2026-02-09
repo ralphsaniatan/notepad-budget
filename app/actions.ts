@@ -106,26 +106,38 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // 3. Get Commitments & Calculate Overspend
         const { data: committedCategories } = await supabase
             .from('categories')
-            .select('id, budget_limit, is_pinned') // Fetch ID for matching
+            .select('id, budget_limit, is_pinned, balance, frequency_months') // Fetch ID for matching
             .eq('user_id', user.id)
             .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
 
         let totalCommitments = 0;
+        let reservedBalance = 0;
 
         committedCategories?.forEach(cat => {
             const limit = safeNum(cat.budget_limit);
+            const balance = safeNum(cat.balance);
+            const freq = safeNum(cat.frequency_months) || 1;
+
             totalCommitments += limit;
 
-            // Calculate Overspend: Max(0, Actual - Limit)
+            // If frequency category, the 'balance' is reserved from Rollover.
+            // We must subtract it from Safe-to-Spend.
+            if (freq > 1) {
+                reservedBalance += balance;
+            }
+
+            // Calculate Overspend: Max(0, Actual - IsAvailable)
+            // Available = Limit (this month) + Balance (saved)
+            const available = limit + (freq > 1 ? balance : 0);
+
             const actual = commitmentSpending[cat.id] || 0;
-            const excess = Math.max(0, actual - limit);
+            const excess = Math.max(0, actual - available);
             overspend += excess;
         });
 
-        // Safe To Spend = (Income + Rollover) - Total Commitments (Envelopes) - Variable Spent - Overspend Penalty
-        // Notice: 'Overspend' is the amount EXCEEDING the envelope. 
-        // The first 'limit' amount was already deducted via 'totalCommitments'.
-        const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
+        // Safe To Spend = (Income + Rollover) - Total Commitments (Envelopes) - Variable Spent - Overspend Penalty - Reserved Balances
+        // Notice: 'Overspend' is the amount EXCEEDING the (limit + balance).
+        const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend - reservedBalance;
 
         // 4. Get Debts
         const { data: debts } = await supabase
@@ -244,6 +256,9 @@ export type TrackedBudget = {
     remaining: number;
     status: 'ok' | 'warning' | 'over';
     percent: number;
+    frequency_months?: number;
+    balance?: number;
+    target_total?: number;
 };
 
 export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
@@ -257,7 +272,7 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
     // 1. Get Pinned Categories
     const { data: categories } = await supabase
         .from('categories')
-        .select('id, name, budget_limit')
+        .select('id, name, budget_limit, frequency_months, balance')
         .eq('user_id', user.id)
         .eq('is_pinned', true);
 
@@ -291,8 +306,18 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
     return categories.map(c => {
         const limit = Number(c.budget_limit);
         const spent = spendingMap[c.id] || 0;
-        const remaining = limit - spent;
-        const percent = Math.min(100, (spent / limit) * 100);
+        const balance = Number(c.balance || 0);
+        const freq = Number(c.frequency_months || 1);
+
+        // Custom logic for frequency categories
+        let remaining = limit - spent;
+        if (freq > 1) {
+            // For sinking funds, Available = Balance + This Month's Contribution
+            // Remaining = (Balance + Limit) - Spent
+            remaining = (balance + limit) - spent;
+        }
+
+        const percent = Math.min(100, (spent / (freq > 1 ? (balance + limit) : limit)) * 100);
 
         let status: 'ok' | 'warning' | 'over' = 'ok';
         if (remaining < 0) status = 'over';
@@ -305,7 +330,10 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
             spent,
             remaining, // Can be negative
             status,
-            percent
+            percent,
+            frequency_months: freq,
+            balance,
+            target_total: limit * freq
         };
     });
 }
@@ -405,16 +433,52 @@ export async function closeMonth() {
         let income = month.income || 0;
         const rollover = month.rollover || 0;
         let totalSpent = 0;
+        const spendingMap: Record<string, number> = {};
 
         const { data: transactions } = await supabase
             .from('transactions')
-            .select('amount, type')
+            .select('amount, type, category_id')
             .eq('month_id', month.id);
 
         transactions?.forEach((tx: any) => {
-            if (tx.type === 'income') income += Number(tx.amount);
-            else if (tx.type === 'expense' || tx.type === 'debt_payment') totalSpent += Number(tx.amount);
+            const amt = Number(tx.amount);
+            if (tx.type === 'income') income += amt;
+            else if (tx.type === 'expense' || tx.type === 'debt_payment') {
+                totalSpent += amt;
+                if (tx.category_id) {
+                    spendingMap[tx.category_id] = (spendingMap[tx.category_id] || 0) + amt;
+                }
+            }
         });
+
+        // --- NEW: Update Frequency Category Balances ---
+        const { data: categories } = await supabase
+            .from('categories')
+            .select('id, budget_limit, frequency_months, balance')
+            .eq('user_id', user.id)
+            .gt('frequency_months', 1); // Only those with frequency
+
+        if (categories && categories.length > 0) {
+            const updates = categories.map(async (cat: any) => {
+                const limit = Number(cat.budget_limit);
+                const currentBalance = Number(cat.balance || 0);
+                const spent = spendingMap[cat.id] || 0;
+
+                // Surplus = Limit - Spent.
+                // New Balance = Old + Surplus. 
+                // Notes: 
+                // - If Limit=500, Spent=0 -> Balance += 500.
+                // - If Limit=500, Spent=1000 -> Balance += -500.
+                // - We clamp at 0. Overspending drains the fund but doesn't create negative reserve.
+                const surplus = limit - spent;
+                const newBalance = Math.max(0, currentBalance + surplus);
+
+                if (newBalance !== currentBalance) {
+                    return supabase.from('categories').update({ balance: newBalance }).eq('id', cat.id);
+                }
+            });
+            await Promise.all(updates);
+        }
 
         // Remaining = (Previous Rollover + Income) - ALL Outflows
         const remaining = (income + rollover) - totalSpent;
@@ -470,7 +534,8 @@ export async function addCategory(
     name: string,
     commitment_type: 'fixed' | 'variable_fixed' | null,
     budget_limit: number,
-    is_pinned: boolean = false
+    is_pinned: boolean = false,
+    frequency_months: number = 1
 ) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -484,7 +549,9 @@ export async function addCategory(
             commitment_type,
             is_commitment: !!commitment_type, // Maintain legacy compat
             budget_limit,
-            is_pinned
+            is_pinned,
+            frequency_months,
+            balance: 0 // Initialize balance
         });
 
     if (error) {
@@ -678,7 +745,8 @@ export async function updateCategory(
     name: string,
     commitment_type: 'fixed' | 'variable_fixed' | null,
     budget_limit: number,
-    is_pinned: boolean = false
+    is_pinned: boolean = false,
+    frequency_months: number = 1
 ) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -691,7 +759,8 @@ export async function updateCategory(
             commitment_type,
             is_commitment: !!commitment_type,
             budget_limit,
-            is_pinned
+            is_pinned,
+            frequency_months
         })
         .eq('id', id)
         .eq('user_id', user.id);

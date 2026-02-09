@@ -23,6 +23,8 @@ export interface LocalCategory {
     is_pinned: boolean; // boolean in local, might be boolean in supabase
     user_id: string;
     sync_status: SyncStatus;
+    frequency_months?: number; // 1 = monthly
+    balance?: number; // Accumulated surplus
 }
 
 export interface LocalDebt {
