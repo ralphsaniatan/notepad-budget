@@ -79,9 +79,9 @@ export async function signUp(formData: FormData) {
 
 export async function loginAsGuest() {
     const supabase = await createClient();
-    const timestamp = Date.now();
-    const email = `guest_${timestamp}@budget.local`;
-    const password = `guest_${timestamp}_pwd`; // Simple random password
+    const guestId = crypto.randomUUID();
+    const email = `guest_${guestId}@budget.local`;
+    const password = crypto.randomUUID(); // Cryptographically secure password
 
     // Auto-signup and login
     const { error } = await supabase.auth.signUp({
