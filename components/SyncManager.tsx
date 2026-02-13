@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getAllUserData, addTransaction, addCategory, addDebt } from "@/app/actions";
+import { getAllUserData, addTransaction, addCategory, addDebt, addTransactionsBulk } from "@/app/actions";
 import { db } from "@/lib/db";
 import { Cloud, CloudOff, RefreshCw, Check, Download, Upload, AlertCircle } from "lucide-react";
 
@@ -193,30 +193,44 @@ export function SyncManager() {
         try {
             // 1. Sync Transactions
             const pendingTxs = await db.transactions.where('sync_status').equals('created').toArray();
-            for (const tx of pendingTxs) {
+            if (pendingTxs.length > 0) {
                 try {
-                    // Pass the original transaction date to preserve correct dating
-                    const res = await addTransaction(tx.amount, tx.description, tx.type, tx.category_id, tx.debt_id, tx.date);
-                    if (res.success && res.transactionId) {
-                        // Delete the local temp record and add with server ID
-                        await db.transactions.delete(tx.id);
-                        await db.transactions.put({
-                            ...tx,
-                            id: res.transactionId, // Use server's ID
-                            sync_status: 'synced'
-                        });
-                        synced++;
-                    } else if (res.success) {
-                        // Fallback if ID not returned
-                        await db.transactions.update(tx.id, { sync_status: 'synced' });
-                        synced++;
+                    const payload = pendingTxs.map(tx => ({
+                        tempId: tx.id,
+                        amount: tx.amount,
+                        description: tx.description,
+                        type: tx.type,
+                        categoryId: tx.category_id,
+                        debtId: tx.debt_id,
+                        date: tx.date
+                    }));
+
+                    const res = await addTransactionsBulk(payload);
+
+                    if (res.success && res.results) {
+                        for (const result of res.results) {
+                            const original = pendingTxs.find(t => t.id === result.tempId);
+                            if (original && result.success) {
+                                await db.transactions.delete(original.id);
+                                await db.transactions.put({
+                                    ...original,
+                                    id: result.serverId,
+                                    sync_status: 'synced'
+                                });
+                                synced++;
+                            }
+                        }
+                        // Count failures if any individual results failed (though bulk action currently returns all success or all fail)
+                        if (res.results.length < pendingTxs.length) {
+                             failed += (pendingTxs.length - res.results.length);
+                        }
                     } else {
-                        failed++;
-                        console.error("SyncManager: Transaction sync returned error", tx.id, res.error);
+                        failed += pendingTxs.length;
+                        console.error("SyncManager: Bulk transaction sync failed", res.error);
                     }
                 } catch (e) {
-                    failed++;
-                    console.error("SyncManager: Failed to sync transaction", tx.id, e);
+                    failed += pendingTxs.length;
+                    console.error("SyncManager: Failed to sync transactions bulk", e);
                 }
             }
 
