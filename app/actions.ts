@@ -496,12 +496,16 @@ export async function closeMonth() {
         // --- NEW: Update Frequency Category Balances ---
         const { data: categories } = await supabase
             .from('categories')
-            .select('id, budget_limit, frequency_months, balance')
+            .select('id, user_id, name, budget_limit, frequency_months, balance')
             .eq('user_id', user.id)
             .gt('frequency_months', 1); // Only those with frequency
 
         if (categories && categories.length > 0) {
-            const updates = categories.map(async (cat: any) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const updatesToPush: any[] = [];
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            categories.forEach((cat: any) => {
                 const limit = Number(cat.budget_limit);
                 const currentBalance = Number(cat.balance || 0);
                 const spent = spendingMap[cat.id] || 0;
@@ -516,10 +520,20 @@ export async function closeMonth() {
                 const newBalance = Math.max(0, currentBalance + surplus);
 
                 if (newBalance !== currentBalance) {
-                    return supabase.from('categories').update({ balance: newBalance }).eq('id', cat.id);
+                    // We only include required fields (name, user_id) to satisfy NOT NULL constraints
+                    // and minimize overwriting other fields (race condition mitigation).
+                    updatesToPush.push({
+                        id: cat.id,
+                        user_id: cat.user_id,
+                        name: cat.name,
+                        balance: newBalance
+                    });
                 }
             });
-            await Promise.all(updates);
+
+            if (updatesToPush.length > 0) {
+                await supabase.from('categories').upsert(updatesToPush, { onConflict: 'id' });
+            }
         }
 
         // Remaining = (Previous Rollover + Income) - ALL Outflows
