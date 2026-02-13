@@ -897,3 +897,143 @@ export async function getAllUserData() {
         }
     };
 }
+
+export async function addTransactionsBulk(transactions: {
+    tempId: string;
+    amount: number;
+    description: string;
+    type: 'expense' | 'income' | 'debt_payment';
+    categoryId?: string;
+    debtId?: string;
+    date: string;
+}[]) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!transactions.length) return { success: true, results: [] };
+
+    // 1. Resolve Months
+    const monthMap = new Map<string, string>(); // isoMonth -> monthId
+    const uniqueMonths = new Set<string>();
+
+    transactions.forEach(tx => {
+        const d = new Date(tx.date);
+        if (!isNaN(d.getTime())) {
+            const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+            uniqueMonths.add(iso);
+        }
+    });
+
+    // Fetch existing months
+    const { data: existingMonths } = await supabase
+        .from('months')
+        .select('id, iso_month')
+        .eq('user_id', user.id)
+        .in('iso_month', Array.from(uniqueMonths));
+
+    if (existingMonths) {
+        existingMonths.forEach((m: any) => monthMap.set(m.iso_month, m.id));
+    }
+
+    // Create missing months
+    const missingMonths = Array.from(uniqueMonths).filter(m => !monthMap.has(m));
+    if (missingMonths.length > 0) {
+        const { data: newMonths, error } = await supabase
+            .from('months')
+            .insert(missingMonths.map(m => ({ user_id: user.id, iso_month: m })))
+            .select('id, iso_month');
+
+        if (error) {
+             console.error("Bulk Add: Month creation failed", error);
+             return { success: false, error: "Failed to create months" };
+        }
+        newMonths?.forEach((m: any) => monthMap.set(m.iso_month, m.id));
+    }
+
+    // 2. Prepare Inserts
+    const inserts: any[] = [];
+    const tempIdMap: string[] = []; // Index -> TempId
+
+    transactions.forEach((tx, idx) => {
+        const d = new Date(tx.date);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        const monthId = monthMap.get(iso);
+
+        if (monthId) {
+            inserts.push({
+                user_id: user.id,
+                month_id: monthId,
+                amount: Number(tx.amount),
+                description: tx.description.trim().substring(0, 100),
+                type: tx.type,
+                category_id: tx.categoryId || null,
+                debt_id: tx.debtId || null,
+                date: tx.date
+            });
+            tempIdMap.push(tx.tempId);
+        }
+    });
+
+    if (inserts.length === 0) return { success: true, results: [] };
+
+    const { data: insertedTxs, error } = await supabase
+        .from('transactions')
+        .insert(inserts)
+        .select('id');
+
+    if (error) {
+        console.error("Bulk Add: Insert failed", error);
+        return { success: false, error: error.message };
+    }
+
+    // 3. Handle Debt Updates
+    // Aggregate changes by debtId
+    const debtChanges = new Map<string, number>();
+    transactions.forEach(tx => {
+        if (tx.debtId) {
+            let change = 0;
+            const amt = Number(tx.amount);
+            if (tx.type === 'debt_payment') change = -amt;
+            else if (tx.type === 'expense') change = amt;
+
+            if (change !== 0) {
+                debtChanges.set(tx.debtId, (debtChanges.get(tx.debtId) || 0) + change);
+            }
+        }
+    });
+
+    if (debtChanges.size > 0) {
+        const debtIds = Array.from(debtChanges.keys());
+        const { data: debts, error: fetchError } = await supabase
+            .from('debts')
+            .select('id, total_balance')
+            .in('id', debtIds);
+
+        if (fetchError) {
+             console.error("Bulk Add: Failed to fetch debts", fetchError);
+        } else if (debts) {
+            const updates = debts.map(async (d: any) => {
+                const change = debtChanges.get(d.id) || 0;
+                if (change !== 0) {
+                    const newBal = Number(d.total_balance) + change;
+                    const { error: updateError } = await supabase.from('debts').update({ total_balance: newBal }).eq('id', d.id);
+                    if (updateError) {
+                        console.error(`Bulk Add: Failed to update debt ${d.id}`, updateError);
+                    }
+                }
+            });
+            await Promise.all(updates);
+        }
+    }
+
+    revalidatePath('/', 'layout');
+
+    // Map back results
+    const results = insertedTxs.map((tx: any, idx: number) => ({
+        tempId: tempIdMap[idx],
+        serverId: tx.id,
+        success: true
+    }));
+
+    return { success: true, results };
+}
