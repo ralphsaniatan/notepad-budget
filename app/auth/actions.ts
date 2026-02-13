@@ -18,14 +18,10 @@ export async function signIn(formData: FormData) {
     // UNTESTED: Username Resolution
     // If no '@', assume it's a username and look up the real email
     if (!email.includes('@')) {
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('email')
-            .ilike('username', email)
-            .single();
+        const { data: realEmail } = await supabase.rpc('get_email_by_username', { username_input: email });
 
-        if (profile?.email) {
-            email = profile.email;
+        if (realEmail) {
+            email = realEmail as string;
         } else {
             return { error: "Username not recognized. If this is your first time, please Login with Email, or Sign Up again." };
         }
