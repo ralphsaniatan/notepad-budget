@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { getAllUserData, addTransaction, addCategory, addDebt } from "@/app/actions";
-import { db } from "@/lib/db";
+import { db, LocalTransaction, LocalCategory, LocalDebt, LocalSavingsGoal } from "@/lib/db";
 import { Cloud, CloudOff, RefreshCw, Check, Download, Upload, AlertCircle } from "lucide-react";
 
 export function SyncManager() {
@@ -58,31 +58,42 @@ export function SyncManager() {
                 const pendingSavingsIds = (await db.savings_goals.where('sync_status').anyOf(['created', 'updated']).toArray()).map(s => s.id);
 
                 // Get server IDs for comparison
-                const serverTxIds = new Set((res.data.transactions || []).map((t: any) => t.id));
-                const serverCatIds = new Set((res.data.categories || []).map((c: any) => c.id));
-                const serverDebtIds = new Set((res.data.debts || []).map((d: any) => d.id));
-                const serverSavingsIds = new Set((res.data.savings_goals || []).map((s: any) => s.id));
+                const serverTxIds = new Set((res.data.transactions || []).map((t: Partial<LocalTransaction>) => t.id));
+                const serverCatIds = new Set((res.data.categories || []).map((c: Partial<LocalCategory>) => c.id));
+                const serverDebtIds = new Set((res.data.debts || []).map((d: Partial<LocalDebt>) => d.id));
+                const serverSavingsIds = new Set((res.data.savings_goals || []).map((s: Partial<LocalSavingsGoal>) => s.id));
 
                 // MERGE: For each server item, update local if not pending
-                for (const tx of res.data.transactions || []) {
-                    if (!pendingTxIds.includes(tx.id)) {
-                        await db.transactions.put({ ...tx, sync_status: 'synced' });
-                    }
+                const transactionsToSync = (res.data.transactions || [])
+                    .filter((tx: Partial<LocalTransaction>) => tx.id && !pendingTxIds.includes(tx.id))
+                    .map((tx: Partial<LocalTransaction>) => ({ ...tx, sync_status: 'synced' } as LocalTransaction));
+
+                if (transactionsToSync.length > 0) {
+                    await db.transactions.bulkPut(transactionsToSync);
                 }
-                for (const cat of res.data.categories || []) {
-                    if (!pendingCatIds.includes(cat.id)) {
-                        await db.categories.put({ ...cat, sync_status: 'synced' });
-                    }
+
+                const categoriesToSync = (res.data.categories || [])
+                    .filter((cat: Partial<LocalCategory>) => cat.id && !pendingCatIds.includes(cat.id))
+                    .map((cat: Partial<LocalCategory>) => ({ ...cat, sync_status: 'synced' } as LocalCategory));
+
+                if (categoriesToSync.length > 0) {
+                    await db.categories.bulkPut(categoriesToSync);
                 }
-                for (const debt of res.data.debts || []) {
-                    if (!pendingDebtIds.includes(debt.id)) {
-                        await db.debts.put({ ...debt, sync_status: 'synced' });
-                    }
+
+                const debtsToSync = (res.data.debts || [])
+                    .filter((debt: Partial<LocalDebt>) => debt.id && !pendingDebtIds.includes(debt.id))
+                    .map((debt: Partial<LocalDebt>) => ({ ...debt, sync_status: 'synced' } as LocalDebt));
+
+                if (debtsToSync.length > 0) {
+                    await db.debts.bulkPut(debtsToSync);
                 }
-                for (const goal of res.data.savings_goals || []) {
-                    if (!pendingSavingsIds.includes(goal.id)) {
-                        await db.savings_goals.put({ ...goal, sync_status: 'synced' });
-                    }
+
+                const savingsGoalsToSync = (res.data.savings_goals || [])
+                    .filter((goal: Partial<LocalSavingsGoal>) => goal.id && !pendingSavingsIds.includes(goal.id))
+                    .map((goal: Partial<LocalSavingsGoal>) => ({ ...goal, sync_status: 'synced' } as LocalSavingsGoal));
+
+                if (savingsGoalsToSync.length > 0) {
+                    await db.savings_goals.bulkPut(savingsGoalsToSync);
                 }
 
                 // DELETE: Remove local synced items that no longer exist on server
@@ -156,16 +167,16 @@ export function SyncManager() {
                         await db.savings_goals.clear();
 
                         if (res.data.transactions?.length) {
-                            await db.transactions.bulkAdd(res.data.transactions.map((t: any) => ({ ...t, sync_status: 'synced' })));
+                            await db.transactions.bulkAdd(res.data.transactions.map((t: Partial<LocalTransaction>) => ({ ...t, sync_status: 'synced' } as LocalTransaction)));
                         }
                         if (res.data.categories?.length) {
-                            await db.categories.bulkAdd(res.data.categories.map((c: any) => ({ ...c, sync_status: 'synced' })));
+                            await db.categories.bulkAdd(res.data.categories.map((c: Partial<LocalCategory>) => ({ ...c, sync_status: 'synced' } as LocalCategory)));
                         }
                         if (res.data.debts?.length) {
-                            await db.debts.bulkAdd(res.data.debts.map((d: any) => ({ ...d, sync_status: 'synced' })));
+                            await db.debts.bulkAdd(res.data.debts.map((d: Partial<LocalDebt>) => ({ ...d, sync_status: 'synced' } as LocalDebt)));
                         }
                         if (res.data.savings_goals?.length) {
-                            await db.savings_goals.bulkAdd(res.data.savings_goals.map((s: any) => ({ ...s, sync_status: 'synced' })));
+                            await db.savings_goals.bulkAdd(res.data.savings_goals.map((s: Partial<LocalSavingsGoal>) => ({ ...s, sync_status: 'synced' } as LocalSavingsGoal)));
                         }
                     });
                     setLastPull(new Date());
