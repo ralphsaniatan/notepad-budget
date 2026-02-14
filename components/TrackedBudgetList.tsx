@@ -8,6 +8,15 @@ import { updateCategory } from "@/app/actions";
 import { X, Save, Plus, Minus, Divide, Equal } from "lucide-react";
 import { toast } from "sonner";
 
+// Helper: Determine if the current month is a payment month for a frequency category
+function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMonths: number, currentIsoMonth: string): boolean {
+    if (!frequencyStart || frequencyMonths <= 1) return true;
+    const startDate = new Date(frequencyStart);
+    const currentDate = new Date(currentIsoMonth);
+    const monthsDiff = (currentDate.getFullYear() - startDate.getFullYear()) * 12 + (currentDate.getMonth() - startDate.getMonth());
+    return monthsDiff >= 0 && monthsDiff % frequencyMonths === 0;
+}
+
 export function TrackedBudgetList() {
     // 1. Get Pinned Categories
     const categories = useLiveQuery(() =>
@@ -44,15 +53,24 @@ export function TrackedBudgetList() {
         const limit = Number(cat.budget_limit);
         const freq = cat.frequency_months || 1;
         const balance = cat.balance || 0;
+        const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonthStr);
 
-        // Custom logic for frequency categories
-        let remaining = limit - spent;
+        // Payment month logic
+        let effectiveLimit = limit;
         if (freq > 1) {
-            // Available = Balance + This Month's Contribution
-            remaining = (balance + limit) - spent;
+            effectiveLimit = paymentMonth ? limit * freq : limit;
         }
 
-        const totalAvailable = freq > 1 ? (limit + balance) : limit;
+        let remaining = effectiveLimit - spent;
+        if (freq > 1 && paymentMonth) {
+            remaining = (effectiveLimit + balance) - spent;
+        } else if (freq > 1) {
+            remaining = (limit + balance) - spent;
+        }
+
+        const totalAvailable = freq > 1
+            ? (paymentMonth ? effectiveLimit + balance : limit + balance)
+            : limit;
         const percent = totalAvailable > 0 ? (spent / totalAvailable) * 100 : 0;
 
         let status: 'ok' | 'warning' | 'over' = 'ok';
@@ -65,7 +83,9 @@ export function TrackedBudgetList() {
             remaining,
             percent,
             status,
-            totalAvailable
+            totalAvailable,
+            effectiveLimit,
+            isPaymentMonth: paymentMonth
         };
     });
 
@@ -160,8 +180,11 @@ export function TrackedBudgetList() {
                                         <div className="flex items-center gap-2">
                                             <h3 className="font-bold text-stone-900 text-sm">{b.name}</h3>
                                             {b.frequency_months && b.frequency_months > 1 && (
-                                                <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
-                                                    Every {b.frequency_months}m
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${b.isPaymentMonth
+                                                        ? 'bg-amber-100 text-amber-700'
+                                                        : 'bg-blue-50 text-blue-600'
+                                                    }`}>
+                                                    {b.isPaymentMonth ? 'DUE' : `Every ${b.frequency_months}m`}
                                                 </span>
                                             )}
                                         </div>

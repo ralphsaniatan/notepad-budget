@@ -20,6 +20,7 @@ type Category = {
     budget_limit: number;
     is_pinned?: boolean;
     frequency_months?: number;
+    frequency_start?: string;
 };
 
 export function CategoriesClient({ initialCategories }: { initialCategories: Category[] }) {
@@ -31,6 +32,10 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
     const [selectedType, setSelectedType] = useState<CatType | null>(null);
     const [budgetLimit, setBudgetLimit] = useState("");
     const [frequency, setFrequency] = useState(1);
+    const [frequencyStart, setFrequencyStart] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
     const [isPinned, setIsPinned] = useState(false);
 
     // Bulk Delete State
@@ -66,7 +71,8 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
             is_commitment: !!commitmentType,
             budget_limit: limit / frequency, // Store monthly limit
             is_pinned: isPinned,
-            frequency_months: frequency
+            frequency_months: frequency,
+            frequency_start: frequency > 1 ? `${frequencyStart}-01` : undefined
         };
         setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
 
@@ -75,10 +81,14 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
         setSelectedType(null);
         setBudgetLimit("");
         setFrequency(1);
+        setFrequencyStart(() => {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        });
         setIsPinned(false);
 
         try {
-            await addCategory(name, commitmentType, limit / frequency, isPinned, frequency);
+            await addCategory(name, commitmentType, limit / frequency, isPinned, frequency, frequency > 1 ? `${frequencyStart}-01` : undefined);
             toast.success("Category created");
         } catch (err) {
             console.error(err);
@@ -236,6 +246,18 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
                                             <option value={12}>Yearly</option>
                                         </select>
                                     </div>
+                                    {frequency > 1 && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Starts</label>
+                                            <input
+                                                type="month"
+                                                value={frequencyStart}
+                                                onChange={e => setFrequencyStart(e.target.value)}
+                                                className="w-full p-4 bg-white border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                                            />
+                                            <p className="text-[10px] text-stone-400">The month you first pay the full bill</p>
+                                        </div>
+                                    )}
                                     <div className="space-y-2">
                                         <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
                                             {frequency > 1 ? "Total Bill Amount (AED)" : (selectedType === 'fixed' ? "Fixed Amount (AED)" : "Monthly Limit (AED)")}
@@ -376,13 +398,22 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
     const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
     const [budgetLimit, setBudgetLimit] = useState((category.budget_limit * (category.frequency_months || 1)).toString());
     const [frequency, setFrequency] = useState(category.frequency_months || 1);
+    const [frequencyStart, setFrequencyStart] = useState(() => {
+        if (category.frequency_start) {
+            const d = new Date(category.frequency_start);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
     const [isPinned, setIsPinned] = useState(category.is_pinned || false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSave = async () => {
         setIsSubmitting(true);
         const limit = parseFloat(budgetLimit) || 0;
-        await updateCategory(category.id, name, commitmentType, limit / frequency, isPinned, frequency);
+        const startVal = frequency > 1 ? `${frequencyStart}-01` : undefined;
+        await updateCategory(category.id, name, commitmentType, limit / frequency, isPinned, frequency, startVal);
         onUpdate({
             ...category,
             name,
@@ -390,7 +421,8 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
             is_commitment: !!commitmentType,
             budget_limit: limit / frequency,
             is_pinned: isPinned,
-            frequency_months: frequency
+            frequency_months: frequency,
+            frequency_start: startVal
         });
         toast.success("Category updated");
         setIsSubmitting(false);
@@ -482,6 +514,18 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                                         <option value={12}>Yearly</option>
                                     </select>
                                 </div>
+                                {frequency > 1 && (
+                                <div className="space-y-2">
+                                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Starts</label>
+                                    <input
+                                        type="month"
+                                        value={frequencyStart}
+                                        onChange={e => setFrequencyStart(e.target.value)}
+                                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                                    />
+                                    <p className="text-[10px] text-stone-400">The month you first pay the full bill</p>
+                                </div>
+                            )}
                             )}
 
                             <div className="space-y-2">
@@ -515,6 +559,6 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

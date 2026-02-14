@@ -24,6 +24,7 @@ export interface LocalCategory {
     user_id: string;
     sync_status: SyncStatus;
     frequency_months?: number; // 1 = monthly
+    frequency_start?: string; // ISO date string, e.g. '2026-02-01' — which month the cycle starts (payment month)
     balance?: number; // Accumulated surplus
 }
 

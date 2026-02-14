@@ -4,6 +4,15 @@ import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { unstable_noStore as noStore } from "next/cache";
 
+// Helper: Determine if the current month is a payment month for a frequency category
+function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMonths: number, currentIsoMonth: string): boolean {
+    if (!frequencyStart || frequencyMonths <= 1) return true; // Monthly = always a payment month
+    const startDate = new Date(frequencyStart);
+    const currentDate = new Date(currentIsoMonth);
+    const monthsDiff = (currentDate.getFullYear() - startDate.getFullYear()) * 12 + (currentDate.getMonth() - startDate.getMonth());
+    return monthsDiff >= 0 && monthsDiff % frequencyMonths === 0;
+}
+
 // Type definitions matching our schema
 type DashboardData = {
     safeToSpend: number;
@@ -111,7 +120,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // 3. Get Commitments & Calculate Overspend
         const { data: committedCategories } = await supabase
             .from('categories')
-            .select('id, budget_limit, is_pinned, balance, frequency_months') // Fetch ID for matching
+            .select('id, budget_limit, is_pinned, balance, frequency_months, frequency_start')
             .eq('user_id', user.id)
             .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
 
@@ -122,46 +131,27 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             const limit = safeNum(cat.budget_limit);
             const balance = safeNum(cat.balance);
             const freq = safeNum(cat.frequency_months) || 1;
+            const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
 
-            totalCommitments += limit;
-
-            // If frequency category, the 'balance' is reserved from Rollover.
-            // We must subtract it from Safe-to-Spend.
             if (freq > 1) {
-                reservedBalance += balance;
+                if (paymentMonth) {
+                    // Payment month: full bill is due. Commitment = limit * freq.
+                    // Balance is being used to pay, not reserved.
+                    totalCommitments += limit * freq;
+                } else {
+                    // Accumulation month: set aside per-month allocation.
+                    totalCommitments += limit;
+                    // Balance is reserved (being saved for payment month).
+                    reservedBalance += balance;
+                }
+            } else {
+                totalCommitments += limit;
             }
 
-            // Calculate Overspend: Max(0, Actual - IsAvailable)
-            // Available = Limit (this month) + Balance (saved)
-            // Note: Commitment spending via Credit Card DOES count towards overspend of the category limit,
-            // even if it doesn't reduce cash safe-to-spend immediately.
-            // Wait - if I overspend my Grocery budget using a Credit Card, does it affect Safe to Spend?
-            // "Overspend penalty" reduces Safe to Spend.
-            // If I overspend via CC, I have created a DEBT. I haven't used extra CASH.
-            // So arguably, Overspend via CC should NOT reduce Safe-to-Spend either?
-            // But if I treat "Safe to Spend" as "Free Cash", and I overspend a commitment, I usually have to cover it.
-            // Let's stick to simplest Cash Flow view:
-            // Safe to Spend = Cash Available.
-            // Credit Card spending = Debt Increase.
-            // So CC spending should NEVER reduce Safe to Spend, even if it causes a category overspend.
-            // ...This gets complex. For now, let's assume Commitments are tracked regardless of source for LIMITS,
-            // but for the "Overspend Penalty" (deduction from Safe to Spend), we should only deduct CASH overspend?
-            // Or maybe the Penalty represents "You need to cover this".
-            // Let's keep existing overspend logic for now (it uses 'actual' which includes CC spending if I don't filter it).
-            // 'commitmentSpending' above currently includes CC spending because I didn't filter it there.
-            // Detailed Check:
-            // Lines 89-96 above track commitment spending. I did NOT filter by debt_id there.
-            // So 'actual' includes CC.
-            // Then 'overspend' is calculated.
-            // Then 'overspend' fails safe-to-spend.
-            // If I buy $500 groceries on CC (Limit $400), Overspend is $100.
-            // Safe to Spend reduces by $100.
-            // Result: I have $100 less "Free Cash" to ensure I can pay that CC bill later?
-            // Ideally yes. YNAB style: you move money to cover the overspend.
-            // So leaving 'overspend' to include CC is PROBABLY safer/better.
-            // BUT 'spentVariable' (Wants) clearly shouldn't include CC. I fixed that above.
-
-            const available = limit + (freq > 1 ? balance : 0);
+            // Calculate Overspend
+            const available = freq > 1
+                ? (paymentMonth ? (limit * freq + balance) : limit)
+                : limit;
 
             const actual = commitmentSpending[cat.id] || 0;
             const excess = Math.max(0, actual - available);
@@ -290,8 +280,10 @@ export type TrackedBudget = {
     status: 'ok' | 'warning' | 'over';
     percent: number;
     frequency_months?: number;
+    frequency_start?: string;
     balance?: number;
     target_total?: number;
+    is_payment_month?: boolean;
 };
 
 export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
@@ -305,7 +297,7 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
     // 1. Get Pinned Categories
     const { data: categories } = await supabase
         .from('categories')
-        .select('id, name, budget_limit, frequency_months, balance')
+        .select('id, name, budget_limit, frequency_months, frequency_start, balance')
         .eq('user_id', user.id)
         .eq('is_pinned', true);
 
@@ -341,16 +333,27 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
         const spent = spendingMap[c.id] || 0;
         const balance = Number(c.balance || 0);
         const freq = Number(c.frequency_months || 1);
+        const paymentMonth = isPaymentMonth(c.frequency_start, freq, isoMonth);
 
-        // Custom logic for frequency categories
-        let remaining = limit - spent;
+        // Payment month logic for frequency categories
+        let effectiveLimit = limit;
         if (freq > 1) {
-            // For sinking funds, Available = Balance + This Month's Contribution
-            // Remaining = (Balance + Limit) - Spent
-            remaining = (balance + limit) - spent;
+            effectiveLimit = paymentMonth ? limit * freq : limit;
         }
 
-        const percent = Math.min(100, (spent / (freq > 1 ? (balance + limit) : limit)) * 100);
+        let remaining = effectiveLimit - spent;
+        if (freq > 1 && paymentMonth) {
+            // Payment month: Available = full bill + accumulated balance
+            remaining = (effectiveLimit + balance) - spent;
+        } else if (freq > 1) {
+            // Accumulation month: Available = per-month allocation + balance
+            remaining = (limit + balance) - spent;
+        }
+
+        const totalAvailable = freq > 1
+            ? (paymentMonth ? effectiveLimit + balance : limit + balance)
+            : limit;
+        const percent = totalAvailable > 0 ? Math.min(100, (spent / totalAvailable) * 100) : 0;
 
         let status: 'ok' | 'warning' | 'over' = 'ok';
         if (remaining < 0) status = 'over';
@@ -359,14 +362,16 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
         return {
             id: c.id,
             name: c.name,
-            limit,
+            limit: effectiveLimit,
             spent,
-            remaining, // Can be negative
+            remaining,
             status,
             percent,
             frequency_months: freq,
+            frequency_start: c.frequency_start,
             balance,
-            target_total: limit * freq
+            target_total: limit * freq,
+            is_payment_month: paymentMonth
         };
     });
 }
@@ -493,10 +498,10 @@ export async function closeMonth() {
             }
         });
 
-        // --- NEW: Update Frequency Category Balances ---
+        // --- Update Frequency Category Balances ---
         const { data: categories } = await supabase
             .from('categories')
-            .select('id, budget_limit, frequency_months, balance')
+            .select('id, budget_limit, frequency_months, frequency_start, balance')
             .eq('user_id', user.id)
             .gt('frequency_months', 1); // Only those with frequency
 
@@ -504,16 +509,24 @@ export async function closeMonth() {
             const updates = categories.map(async (cat: any) => {
                 const limit = Number(cat.budget_limit);
                 const currentBalance = Number(cat.balance || 0);
+                const freq = Number(cat.frequency_months);
                 const spent = spendingMap[cat.id] || 0;
+                const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
 
-                // Surplus = Limit - Spent.
-                // New Balance = Old + Surplus. 
-                // Notes: 
-                // - If Limit=500, Spent=0 -> Balance += 500.
-                // - If Limit=500, Spent=1000 -> Balance += -500.
-                // - We clamp at 0. Overspending drains the fund but doesn't create negative reserve.
-                const surplus = limit - spent;
-                const newBalance = Math.max(0, currentBalance + surplus);
+                let newBalance: number;
+                if (paymentMonth) {
+                    // Payment month: the full bill was due.
+                    // Available was (limit * freq) + balance.
+                    // After spending, remaining balance = max(0, (limit*freq + balance) - spent)
+                    // But we reset the fund since the cycle is complete.
+                    // Any overspend is already handled via dashboard overspend penalty.
+                    // Start fresh accumulation from 0.
+                    newBalance = 0;
+                } else {
+                    // Accumulation month: Surplus = per-month limit - spent.
+                    const surplus = limit - spent;
+                    newBalance = Math.max(0, currentBalance + surplus);
+                }
 
                 if (newBalance !== currentBalance) {
                     return supabase.from('categories').update({ balance: newBalance }).eq('id', cat.id);
@@ -577,7 +590,8 @@ export async function addCategory(
     commitment_type: 'fixed' | 'variable_fixed' | null,
     budget_limit: number,
     is_pinned: boolean = false,
-    frequency_months: number = 1
+    frequency_months: number = 1,
+    frequency_start?: string
 ) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -593,6 +607,7 @@ export async function addCategory(
             budget_limit,
             is_pinned,
             frequency_months,
+            frequency_start: frequency_months > 1 ? (frequency_start || null) : null,
             balance: 0 // Initialize balance
         });
 
@@ -788,7 +803,8 @@ export async function updateCategory(
     commitment_type: 'fixed' | 'variable_fixed' | null,
     budget_limit: number,
     is_pinned: boolean = false,
-    frequency_months: number = 1
+    frequency_months: number = 1,
+    frequency_start?: string
 ) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -802,7 +818,8 @@ export async function updateCategory(
             is_commitment: !!commitment_type,
             budget_limit,
             is_pinned,
-            frequency_months
+            frequency_months,
+            frequency_start: frequency_months > 1 ? (frequency_start || null) : null
         })
         .eq('id', id)
         .eq('user_id', user.id);
