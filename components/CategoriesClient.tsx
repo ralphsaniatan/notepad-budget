@@ -493,50 +493,53 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                         <div className="space-y-4 animate-in slide-in-from-top-1 fade-in duration-200">
                             {/* Frequency Selector */}
                             {(commitmentType === 'fixed' || commitmentType === 'variable_fixed') && (
-                                <div className="space-y-2">
-                                    <div className="flex justify-between">
-                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
-                                        {frequency > 1 && (
-                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                                                Monthly: {currency((parseFloat(budgetLimit) || 0) / frequency)}
-                                            </span>
-                                        )}
+                                <>
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
+                                            {frequency > 1 && (
+                                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                                    Monthly: {currency((parseFloat(budgetLimit) || 0) / frequency)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <select
+                                            value={frequency}
+                                            onChange={e => setFrequency(Number(e.target.value))}
+                                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900 appearance-none"
+                                        >
+                                            <option value={1}>Monthly</option>
+                                            <option value={2}>Every 2 Months</option>
+                                            <option value={3}>Every 3 Months (Quarterly)</option>
+                                            <option value={6}>Every 6 Months</option>
+                                            <option value={12}>Yearly</option>
+                                        </select>
                                     </div>
-                                    <select
-                                        value={frequency}
-                                        onChange={e => setFrequency(Number(e.target.value))}
-                                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900 appearance-none"
-                                    >
-                                        <option value={1}>Monthly</option>
-                                        <option value={2}>Every 2 Months</option>
-                                        <option value={3}>Every 3 Months (Quarterly)</option>
-                                        <option value={6}>Every 6 Months</option>
-                                        <option value={12}>Yearly</option>
-                                    </select>
-                                </div>
-                                {frequency > 1 && (
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Starts</label>
-                                    <input
-                                        type="month"
-                                        value={frequencyStart}
-                                        onChange={e => setFrequencyStart(e.target.value)}
-                                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
-                                    />
-                                    <p className="text-[10px] text-stone-400">The month you first pay the full bill</p>
-                                </div>
-                            )}
+                                    {frequency > 1 && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Starts</label>
+                                            <input
+                                                type="month"
+                                                value={frequencyStart}
+                                                onChange={e => setFrequencyStart(e.target.value)}
+                                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                                            />
+                                            <p className="text-[10px] text-stone-400">The month you first pay the full bill</p>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-2">
-                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                    {frequency > 1 ? "Total Bill Amount (AED)" : (commitmentType === 'fixed' ? "Fixed Amount (AED)" : "Monthly Limit (AED)")}
-                                </label>
-                                <input
-                                    type="number"
-                                    value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
-                                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
-                                />
-                            </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
+                                            {frequency > 1 ? "Total Bill Amount (AED)" : (commitmentType === 'fixed' ? "Fixed Amount (AED)" : "Monthly Limit (AED)")}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={budgetLimit} onChange={e => setBudgetLimit(e.target.value)}
+                                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
@@ -558,6 +561,6 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                     </button>
                 </div>
             </div>
-        </div >
+        </div>
     );
 }
