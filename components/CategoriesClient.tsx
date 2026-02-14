@@ -526,7 +526,6 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                                     <p className="text-[10px] text-stone-400">The month you first pay the full bill</p>
                                 </div>
                             )}
-                            )}
 
                             <div className="space-y-2">
                                 <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
