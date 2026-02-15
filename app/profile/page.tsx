@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signOut, getUser, resetUserData } from "@/app/auth/actions";
+import { signOut, getUser } from "@/app/auth/actions";
 import { useRouter } from "next/navigation";
 import { LogOut, ChevronLeft, User, Bell, Database, Shield, Trash2 } from "lucide-react";
 import { PaperCard } from "@/components/ui/PaperCard";
