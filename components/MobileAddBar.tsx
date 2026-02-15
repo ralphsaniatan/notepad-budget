@@ -116,6 +116,8 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                             name: newCatName,
                             budget_limit: budgetLimit / currentNewCatFrequency,
                             type: isFixed ? 'fixed' : 'variable',
+                            commitment_type: isFixed ? 'fixed' : (currentNewCatType === 'needs' ? 'variable_fixed' : null),
+                            is_commitment: isFixed || currentNewCatType === 'needs',
                             is_pinned: currentIsPinned,
                             frequency_months: currentNewCatFrequency,
                             user_id: 'unknown',
