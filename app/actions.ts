@@ -408,7 +408,7 @@ export async function addTransaction(
 
     // Validation
     if (!amount || amount <= 0 || !isFinite(amount)) return { success: false, error: "Invalid amount" };
-    if (description.length > 100) return { success: false, error: "Description too long (max 100 chars)" };
+    if (description.length > 255) return { success: false, error: "Description too long (max 255 chars)" };
 
     // 1. Insert Transaction and return the new ID
     const { data: newTx, error } = await supabase

@@ -119,7 +119,7 @@ export function DashboardClient({ initialData }: DashboardData) {
                 amount,
                 type,
                 date: new Date().toISOString(),
-                category_id: type !== 'debt_payment' ? targetId : undefined,
+                category_id: (type !== 'debt_payment' && targetId) ? targetId : undefined,
                 debt_id: type === 'debt_payment' ? targetId : debtId, // Use debtId for CC expenses
                 user_id: 'unknown',
                 created_at: new Date().toISOString(),

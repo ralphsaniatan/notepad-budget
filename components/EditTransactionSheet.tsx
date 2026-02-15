@@ -172,12 +172,13 @@ export function EditTransactionSheet({
                         type="text"
                         value={description}
                         onChange={e => setDescription(e.target.value)}
+                        maxLength={255}
                         className="w-full text-lg border-b border-stone-100 py-2 outline-none font-bold text-stone-700"
                     />
 
                     {type === 'expense' && (
                         <select
-                            value={targetId}
+                            value={targetId || ""}
                             onChange={e => setTargetId(e.target.value)}
                             className="w-full py-3 bg-stone-50 rounded px-3 text-stone-800 font-bold outline-none"
                         >
