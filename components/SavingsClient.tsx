@@ -168,7 +168,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                         {/* Total Remaining */}
                         <div>
                             <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Total Remaining</h3>
-                            <div className="text-2xl font-mono font-bold text-emerald-900">
+                            <div className="text-xl font-mono font-bold text-emerald-900">
                                 {currency(goals.reduce((acc, g) => acc + (Math.max(0, g.target_amount - g.current_amount)), 0))}
                             </div>
                         </div>
@@ -176,7 +176,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                         {/* Monthly Contribution Needed */}
                         <div className="text-right">
                             <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Est. Monthly</h3>
-                            <div className="text-xl font-mono font-bold text-emerald-800">
+                            <div className="text-lg font-mono font-bold text-emerald-800">
                                 {currency(goals.reduce((acc, g) => {
                                     const remaining = Math.max(0, g.target_amount - g.current_amount);
                                     if (remaining <= 0) return acc;
