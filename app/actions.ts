@@ -851,6 +851,56 @@ export async function deleteCategory(id: string) {
     return { success: true };
 }
 
+export async function transferCategoryBalance(sourceId: string, targetId: string, amount: number) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    if (amount <= 0) return { success: false, error: "Invalid amount" };
+
+    // 1. Get current balances (and verify ownership)
+    const { data: categories, error: fetchError } = await supabase
+        .from('categories')
+        .select('id, balance, name')
+        .in('id', [sourceId, targetId])
+        .eq('user_id', user.id);
+
+    if (fetchError || !categories || categories.length !== 2) {
+        return { success: false, error: "Invalid categories or permission denied" };
+    }
+
+    const source = categories.find(c => c.id === sourceId);
+    const target = categories.find(c => c.id === targetId);
+
+    if (!source || !target) return { success: false, error: "Categories not found" };
+
+    // 2. Perform Transfer (Sequential updates)
+
+    // Update Source
+    const { error: sourceError } = await supabase
+        .from('categories')
+        .update({ balance: Number(source.balance || 0) - amount })
+        .eq('id', sourceId);
+
+    if (sourceError) return { success: false, error: "Failed to deduct from source" };
+
+    // Update Target
+    const { error: targetError } = await supabase
+        .from('categories')
+        .update({ balance: Number(target.balance || 0) + amount })
+        .eq('id', targetId);
+
+    if (targetError) {
+        // Attempt rollback
+        await supabase.from('categories').update({ balance: source.balance }).eq('id', sourceId);
+        return { success: false, error: "Failed to add to target (rolled back)" };
+    }
+
+    revalidatePath('/', 'layout');
+    revalidatePath('/categories');
+    return { success: true };
+}
+
 // --- Debt Management ---
 
 export async function updateDebt(id: string, name: string, balance: number, rate: number) {
