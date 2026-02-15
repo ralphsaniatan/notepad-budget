@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getAllUserData, addTransaction, addCategory, updateCategory, addDebt } from "@/app/actions";
+import { getAllUserData, addTransaction, addCategory, updateCategory, addDebt, updateTransaction, updateDebt } from "@/app/actions";
 import { db } from "@/lib/db";
 import { Cloud, CloudOff, RefreshCw, Check, Download, Upload, AlertCircle } from "lucide-react";
 
@@ -258,7 +258,7 @@ export function SyncManager() {
                 }
             }
 
-            // 3. Sync Debts
+            // 3. Sync Debts (Create)
             const pendingDebts = await db.debts.where('sync_status').equals('created').toArray();
             for (const debt of pendingDebts) {
                 try {
@@ -272,6 +272,42 @@ export function SyncManager() {
                 } catch (e) {
                     failed++;
                     console.error("SyncManager: Failed to sync debt", debt.id, e);
+                }
+            }
+
+            // 4. Sync Transactions (Update) - MISSING BEFORE
+            const updatedTxs = await db.transactions.where('sync_status').equals('updated').toArray();
+            for (const tx of updatedTxs) {
+                try {
+                    const res = await updateTransaction(tx.id, tx.amount, tx.description, tx.type, tx.category_id, tx.debt_id);
+                    if (res.success) {
+                        await db.transactions.update(tx.id, { sync_status: 'synced' });
+                        synced++;
+                    } else {
+                        failed++;
+                        console.error("SyncManager: Failed to update transaction", tx.id, res.error);
+                    }
+                } catch (e) {
+                    failed++;
+                    console.error("SyncManager: Failed to sync transaction update", tx.id, e);
+                }
+            }
+
+            // 5. Sync Debts (Update) - MISSING BEFORE
+            const updatedDebts = await db.debts.where('sync_status').equals('updated').toArray();
+            for (const debt of updatedDebts) {
+                try {
+                    const res = await updateDebt(debt.id, debt.name, debt.total_balance, debt.interest_rate);
+                    if (res.success) {
+                        await db.debts.update(debt.id, { sync_status: 'synced' });
+                        synced++;
+                    } else {
+                        failed++;
+                        console.error("SyncManager: Failed to update debt", debt.id, res.error);
+                    }
+                } catch (e) {
+                    failed++;
+                    console.error("SyncManager: Failed to sync debt update", debt.id, e);
                 }
             }
 
