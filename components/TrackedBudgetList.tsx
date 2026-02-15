@@ -31,6 +31,7 @@ export function TrackedBudgetList() {
     const [isTransferring, setIsTransferring] = useState(false);
     const [transferTargetId, setTransferTargetId] = useState("");
     const [transferAmount, setTransferAmount] = useState("");
+    const [showDepleted, setShowDepleted] = useState(true);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -225,53 +226,64 @@ export function TrackedBudgetList() {
 
                 {!collapsed && (
                     <div className="flex flex-col gap-3">
-                        {budgets.map(b => {
-                            const isDepleted = b.remaining <= 0;
-                            return (
-                                <button
-                                    key={b.id}
-                                    onClick={() => handleOpenEdit(b)}
-                                    className="block w-full text-left"
-                                >
-                                    <PaperCard className={`p-3 space-y-2 border-l-4 transition-all hover:bg-stone-50 active:scale-[0.98] cursor-pointer ${isDepleted
-                                        ? "border-l-stone-200 bg-stone-50/50 grayscale opacity-60"
-                                        : "border-l-stone-900"
-                                        }`}>
-                                        <div className="flex justify-between items-end">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className={`font-bold text-sm ${isDepleted ? "text-stone-500" : "text-stone-900"}`}>{b.name}</h3>
-                                                {b.frequency_months && b.frequency_months > 1 && (
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${b.isPaymentMonth
-                                                        ? 'bg-amber-100 text-amber-700'
-                                                        : 'bg-blue-50 text-blue-600'
-                                                        }`}>
-                                                        {b.isPaymentMonth ? 'DUE' : `Every ${b.frequency_months}m`}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-right font-mono text-xs font-bold">
-                                                <span className={isDepleted ? "text-stone-400" : getStatusColor(b.status)}>
-                                                    AED {Math.abs(b.remaining).toFixed(2)}
-                                                </span>
-                                                <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
-                                                    {b.status === 'over' ? 'Over' : 'Left'}
-                                                </span>
-                                            </div>
-                                        </div>
+                        <div className="flex justify-end px-1">
+                            <button
+                                onClick={() => setShowDepleted(!showDepleted)}
+                                className="text-[10px] uppercase font-bold tracking-wider text-stone-400 hover:text-stone-600 transition-colors"
+                            >
+                                {showDepleted ? "Hide Completed" : "Show Completed"}
+                            </button>
+                        </div>
 
-                                        {/* Progress Bar - Only show if not depleted */}
-                                        {!isDepleted && (
-                                            <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full transition-all duration-500 ${getProgressBarColor(b.status, b.percent)}`}
-                                                    style={{ width: `${Math.min(100, b.percent)}%` }}
-                                                />
+                        {budgets
+                            .filter(b => showDepleted || b.remaining > 0)
+                            .map(b => {
+                                const isDepleted = b.remaining <= 0;
+                                return (
+                                    <button
+                                        key={b.id}
+                                        onClick={() => handleOpenEdit(b)}
+                                        className="block w-full text-left"
+                                    >
+                                        <PaperCard className={`border-l-4 transition-all hover:bg-stone-50 active:scale-[0.98] cursor-pointer ${isDepleted
+                                            ? "border-l-stone-200 bg-stone-50/50 grayscale opacity-60 p-2"
+                                            : "border-l-stone-900 p-3 space-y-2"
+                                            }`}>
+                                            <div className="flex justify-between items-end">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className={`font-bold ${isDepleted ? "text-xs text-stone-500" : "text-sm text-stone-900"}`}>{b.name}</h3>
+                                                    {b.frequency_months && b.frequency_months > 1 && (
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${b.isPaymentMonth
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : 'bg-blue-50 text-blue-600'
+                                                            }`}>
+                                                            {b.isPaymentMonth ? 'DUE' : `Every ${b.frequency_months}m`}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-right font-mono text-xs font-bold">
+                                                    <span className={isDepleted ? "text-stone-400" : getStatusColor(b.status)}>
+                                                        AED {Math.abs(b.remaining).toFixed(2)}
+                                                    </span>
+                                                    <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
+                                                        {b.status === 'over' ? 'Over' : 'Left'}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        )}
-                                    </PaperCard>
-                                </button>
-                            );
-                        })}
+
+                                            {/* Progress Bar - Only show if not depleted */}
+                                            {!isDepleted && (
+                                                <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full transition-all duration-500 ${getProgressBarColor(b.status, b.percent)}`}
+                                                        style={{ width: `${Math.min(100, b.percent)}%` }}
+                                                    />
+                                                </div>
+                                            )}
+                                        </PaperCard>
+                                    </button>
+                                );
+                            })}
                     </div>
                 )}
             </section>
