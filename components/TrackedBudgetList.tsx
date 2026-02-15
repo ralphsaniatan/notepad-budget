@@ -1,3 +1,5 @@
+"use client";
+
 import { PaperCard } from "@/components/ui/PaperCard";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, LocalCategory } from "@/lib/db";
