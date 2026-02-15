@@ -164,32 +164,38 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                 <div className="relative bg-emerald-50 border-l-4 border-emerald-400 rounded-r-xl shadow-md p-4 mb-6">
                     <div className="absolute -top-1 left-4 w-8 h-3 bg-emerald-300/70 rounded-sm transform -rotate-1"></div>
 
-                    {/* Total Remaining */}
-                    <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Total Remaining to Save</h3>
-                    <div className="text-2xl font-mono font-bold text-emerald-900 mb-4">
-                        {currency(goals.reduce((acc, g) => acc + (Math.max(0, g.target_amount - g.current_amount)), 0))}
-                    </div>
+                    <div className="flex justify-between items-end gap-4">
+                        {/* Total Remaining */}
+                        <div>
+                            <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Total Remaining</h3>
+                            <div className="text-2xl font-mono font-bold text-emerald-900">
+                                {currency(goals.reduce((acc, g) => acc + (Math.max(0, g.target_amount - g.current_amount)), 0))}
+                            </div>
+                        </div>
 
-                    {/* Monthly Contribution Needed */}
-                    <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Est. Monthly Contribution</h3>
-                    <div className="text-xl font-mono font-bold text-emerald-800">
-                        {currency(goals.reduce((acc, g) => {
-                            const remaining = Math.max(0, g.target_amount - g.current_amount);
-                            if (remaining <= 0) return acc;
+                        {/* Monthly Contribution Needed */}
+                        <div className="text-right">
+                            <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Est. Monthly</h3>
+                            <div className="text-xl font-mono font-bold text-emerald-800">
+                                {currency(goals.reduce((acc, g) => {
+                                    const remaining = Math.max(0, g.target_amount - g.current_amount);
+                                    if (remaining <= 0) return acc;
 
-                            const now = new Date();
-                            const target = new Date(g.target_date);
-                            const diffTime = target.getTime() - now.getTime();
-                            // If past due or due today, treat as 1 month (immediate)
-                            if (diffTime <= 0) return acc + remaining;
+                                    const now = new Date();
+                                    const target = new Date(g.target_date);
+                                    const diffTime = target.getTime() - now.getTime();
+                                    // If past due or due today, treat as 1 month (immediate)
+                                    if (diffTime <= 0) return acc + remaining;
 
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            const months = Math.max(1, diffDays / 30); // Use float months for better accuracy or ceil? 
-                            // User likely thinks in whole months. "5 months left" -> divide by 5.
-                            // Let's use max(1, diffInMonths)
-                            return acc + (remaining / months);
-                        }, 0))}
-                        <span className="text-xs text-emerald-600 font-normal ml-1">/ mo</span>
+                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                    const months = Math.max(1, diffDays / 30); // Use float months for better accuracy or ceil? 
+                                    // User likely thinks in whole months. "5 months left" -> divide by 5.
+                                    // Let's use max(1, diffInMonths)
+                                    return acc + (remaining / months);
+                                }, 0))}
+                                <span className="text-xs text-emerald-600 font-normal ml-1">/ mo</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
