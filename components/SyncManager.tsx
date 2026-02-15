@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getAllUserData, addTransaction, addCategory, addDebt } from "@/app/actions";
+import { getAllUserData, addTransaction, addCategory, updateCategory, addDebt } from "@/app/actions";
 import { db } from "@/lib/db";
 import { Cloud, CloudOff, RefreshCw, Check, Download, Upload, AlertCircle } from "lucide-react";
 
