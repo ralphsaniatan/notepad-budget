@@ -224,9 +224,9 @@ export function SyncManager() {
             const pendingCats = await db.categories.where('sync_status').equals('created').toArray();
             for (const cat of pendingCats) {
                 try {
-                    const commitType = cat.type === 'fixed' ? 'fixed' : null;
+                    const commitType = cat.commitment_type || (cat.type === 'fixed' ? 'fixed' : null);
                     // Pass frequency fields
-                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned, cat.frequency_months, cat.frequency_start);
+                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned, cat.frequency_months, cat.frequency_start); // turbo-all
                     if (res.success) {
                         await db.categories.update(cat.id, { sync_status: 'synced' });
                         synced++;
