@@ -955,3 +955,25 @@ export async function getAllUserData() {
         }
     };
 }
+
+export async function resetUserData() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+
+    try {
+        // Delete all data for this user
+        // Note: constraint cascades might handle some, but explicit is safer for logic
+        await supabase.from('transactions').delete().eq('user_id', user.id);
+        await supabase.from('categories').delete().eq('user_id', user.id);
+        await supabase.from('debts').delete().eq('user_id', user.id);
+        await supabase.from('savings_goals').delete().eq('user_id', user.id);
+        await supabase.from('months').delete().eq('user_id', user.id);
+
+        revalidatePath('/', 'layout');
+        return { success: true };
+    } catch (e: any) {
+        console.error("Reset Data Error:", e);
+        return { success: false, error: e.message };
+    }
+}

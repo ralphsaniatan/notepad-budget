@@ -1,19 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signOut, getUser } from "@/app/auth/actions";
+import { signOut, getUser, resetUserData } from "@/app/auth/actions";
 import { useRouter } from "next/navigation";
-import { LogOut, ChevronLeft, User, Bell, Database, Shield } from "lucide-react";
+import { LogOut, ChevronLeft, User, Bell, Database, Shield, Trash2 } from "lucide-react";
 import { PaperCard } from "@/components/ui/PaperCard";
 import { Spinner } from "@/components/ui/Spinner";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
+import { resetUserData as resetServerData } from "@/app/actions";
 
 export default function ProfilePage() {
     const router = useRouter();
     const [user, setUser] = useState<{ email?: string } | null>(null);
     const [loading, setLoading] = useState(true);
     const [isClearingData, setIsClearingData] = useState(false);
+    const [isResetting, setIsResetting] = useState(false);
 
     useEffect(() => {
         // Fetch user info
@@ -45,6 +47,36 @@ export default function ProfilePage() {
             toast.error("Failed to clear data");
         } finally {
             setIsClearingData(false);
+        }
+    };
+
+    const handleResetData = async () => {
+        // Double Confirmation
+        if (!confirm("⚠️ ARE YOU SURE? ⚠️\n\nThis will permanently DELETE ALL your data (Transactions, Categories, Debts, Goals) from the server.\n\nThis action CANNOT be undone.")) return;
+        if (!confirm("Really delete everything? This is your last chance to cancel.")) return;
+
+        setIsResetting(true);
+        try {
+            // 1. Clear Local DB
+            await db.transactions.clear();
+            await db.categories.clear();
+            await db.debts.clear();
+            await db.savings_goals.clear();
+
+            // 2. Clear Server Data
+            const res = await resetServerData();
+
+            if (res.success) {
+                toast.success("Account data reset successfully");
+                router.push('/');
+            } else {
+                toast.error("Failed to reset server data: " + res.error);
+            }
+        } catch (e: any) {
+            console.error(e);
+            toast.error("Reset failed: " + e.message);
+        } finally {
+            setIsResetting(false);
         }
     };
 
@@ -117,7 +149,7 @@ export default function ProfilePage() {
                 <PaperCard className="p-4">
                     <button
                         onClick={handleClearLocalData}
-                        disabled={isClearingData}
+                        disabled={isClearingData || isResetting}
                         className="w-full flex items-center gap-3"
                     >
                         <Database size={20} className="text-amber-500" />
@@ -127,15 +159,33 @@ export default function ProfilePage() {
                     </button>
                 </PaperCard>
 
-                {/* Logout */}
-                <PaperCard className="p-4 border-red-100">
+                {/* LOGOUT */}
+                <PaperCard className="p-4 border-stone-100">
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-3 text-red-600"
+                        disabled={isClearingData || isResetting}
+                        className="w-full flex items-center gap-3 text-stone-600"
                     >
                         <LogOut size={20} />
                         <span className="font-bold">Log Out</span>
                     </button>
+                </PaperCard>
+
+                {/* RESET DATA (DANGER) */}
+                <PaperCard className="p-4 bg-red-50 border-red-100">
+                    <button
+                        onClick={handleResetData}
+                        disabled={isResetting || isClearingData}
+                        className="w-full flex items-center gap-3 text-red-600"
+                    >
+                        <Trash2 size={20} />
+                        <span className="font-bold">
+                            {isResetting ? "Deleting..." : "Reset Account Data"}
+                        </span>
+                    </button>
+                    <p className="mt-2 text-[10px] text-red-400 text-center">
+                        Permanently deletes all transactions and categories.
+                    </p>
                 </PaperCard>
             </section>
 
