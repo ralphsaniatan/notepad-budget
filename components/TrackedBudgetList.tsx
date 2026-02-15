@@ -194,13 +194,13 @@ export function TrackedBudgetList() {
                 <CategorySheet
                     category={{
                         ...editingBudget,
-                        commitment_type: editingBudget.type === 'fixed' ? 'fixed' : null,
-                        is_commitment: editingBudget.type === 'fixed',
+                        commitment_type: editingBudget.commitment_type || (editingBudget.type === 'fixed' ? 'fixed' : null),
+                        is_commitment: editingBudget.is_commitment || editingBudget.type === 'fixed',
                     } as Category}
                     allCategories={categories.map(c => ({
                         ...c,
-                        commitment_type: c.type === 'fixed' ? 'fixed' : null,
-                        is_commitment: c.type === 'fixed'
+                        commitment_type: c.commitment_type || (c.type === 'fixed' ? 'fixed' : null),
+                        is_commitment: c.is_commitment || c.type === 'fixed'
                     } as Category))}
                     onClose={() => setEditingBudget(null)}
                     onSave={() => setEditingBudget(null)}

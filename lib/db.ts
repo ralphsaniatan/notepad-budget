@@ -19,7 +19,9 @@ export interface LocalCategory {
     id: string;
     name: string;
     budget_limit: number;
-    type: 'variable' | 'fixed';
+    type: 'variable' | 'fixed'; // Deprecated in favor of commitment_type
+    commitment_type?: 'fixed' | 'variable_fixed' | null;
+    is_commitment: boolean;
     is_pinned: boolean; // boolean in local, might be boolean in supabase
     user_id: string;
     sync_status: SyncStatus;
