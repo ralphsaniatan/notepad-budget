@@ -695,7 +695,7 @@ export async function addSavingsGoal(name: string, targetAmount: number, targetD
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    const { error } = await supabase
+    const { data: newGoal, error } = await supabase
         .from('savings_goals')
         .insert({
             user_id: user.id,
@@ -703,7 +703,9 @@ export async function addSavingsGoal(name: string, targetAmount: number, targetD
             target_amount: targetAmount,
             target_date: targetDate,
             current_amount: 0
-        });
+        })
+        .select()
+        .single();
 
     if (error) {
         console.error("Add Savings Goal Error:", error);
@@ -711,7 +713,7 @@ export async function addSavingsGoal(name: string, targetAmount: number, targetD
     }
 
     revalidatePath('/savings');
-    return { success: true };
+    return { success: true, goalId: newGoal.id };
 }
 
 export async function contributeToSavings(goalId: string, amount: number, goalName: string) {

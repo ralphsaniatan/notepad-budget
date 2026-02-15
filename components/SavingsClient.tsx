@@ -41,12 +41,26 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
             await db.savings_goals.add(newGoal);
 
             // 2. Server Action (Hybrid Sync)
-            // Ideally SyncManager handles this. For now, fire and forget (or await for safety)
-            await addSavingsGoal(name, targetAmount, targetDateStr);
+            const res = await addSavingsGoal(name, targetAmount, targetDateStr);
+
+            // 3. Reconcile ID if successful
+            if (res.success && res.goalId) {
+                // Dexie doesn't allow updating Primary Key. We must delete old and add new.
+                await db.savings_goals.delete(newGoal.id);
+                await db.savings_goals.add({
+                    ...newGoal,
+                    id: res.goalId,
+                    sync_status: 'synced'
+                });
+            } else if (res.success) {
+                // Fallback if no ID returned (shouldn't happen with updated action)
+                await db.savings_goals.update(newGoal.id, { sync_status: 'synced' });
+            }
 
             setShowAddForm(false);
         } catch (err) {
             console.error(err);
+            toast.error("Failed to add goal");
         } finally {
             setIsSubmitting(false);
         }
