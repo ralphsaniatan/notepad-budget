@@ -34,20 +34,31 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
 
         setIsSubmitting(true);
         try {
-            // Local
-            const newDebt = {
-                id: crypto.randomUUID(),
+            // Local (Optimistic)
+            const tempId = crypto.randomUUID();
+            const newDebt: Debt & { user_id: string, sync_status: 'created' } = {
+                id: tempId,
                 name,
                 total_balance: balance,
                 interest_rate: 0,
                 user_id: 'unknown',
-                sync_status: 'created' as const
+                sync_status: 'created'
             };
             await db.debts.add(newDebt);
             setShowAddForm(false);
 
             // Server
-            await addDebt(name, balance, 0);
+            const res = await addDebt(name, balance, 0);
+
+            // Reconcile ID if successful
+            if (res.success && res.id) {
+                await db.debts.delete(tempId);
+                await db.debts.put({
+                    ...newDebt,
+                    id: res.id,
+                    sync_status: 'synced'
+                });
+            }
         } catch (err) {
             console.error("Failed to add debt", err);
             toast.error("Failed to add debt");
@@ -63,9 +74,10 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
 
         setIsSubmitting(true);
         try {
-            // 1. Local Transaction
+            // 1. Local Transaction (Optimistic)
+            const tempTxId = crypto.randomUUID();
             const tx = {
-                id: crypto.randomUUID(),
+                id: tempTxId,
                 description: `Payment for ${payDebt.name}`,
                 amount: amount,
                 type: 'debt_payment' as const,
@@ -89,7 +101,26 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
 
             // 3. Server Action
             // addTransaction handles the debt balance update on server too
-            await addTransaction(amount, `Payment for ${payDebt.name}`, 'debt_payment', undefined, payDebt.id);
+            const res = await addTransaction(amount, `Payment for ${payDebt.name}`, 'debt_payment', undefined, payDebt.id);
+
+            // Reconcile Transaction ID
+            if (res.success && res.transactionId) {
+                await db.transactions.delete(tempTxId);
+                await db.transactions.put({
+                    ...tx,
+                    id: res.transactionId,
+                    sync_status: 'synced'
+                });
+
+                // Also mark debt as synced since we updated it via transaction on server?
+                // Actually server side addTransaction updates the debt balance. 
+                // We should mark the LOCAL debt as synced too so SyncManager doesn't try to update it again?
+                // But SyncManager only syncs 'updated' debts.
+                // Our local update set it to 'updated'.
+                // If we don't set it to 'synced', SyncManager will call updateDebt later.
+                // updateDebt works, so it's not critical, but efficient to mark it synced.
+                await db.debts.update(payDebt.id, { sync_status: 'synced' });
+            }
 
         } catch (err) {
             console.error("Pay Error", err);
@@ -153,7 +184,7 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
                         onClick={() => setShowAddForm(true)}
                         className="bg-stone-900 text-white shadow-xl px-6 py-4 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-black transition-transform active:scale-95"
                     >
-                        <Plus size={20} /> Metric Debt
+                        <Plus size={20} /> Track Debt
                     </button>
                 </div>
             )}
