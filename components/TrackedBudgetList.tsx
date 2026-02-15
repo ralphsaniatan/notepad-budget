@@ -5,7 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, LocalCategory } from "@/lib/db";
 import { useState, useEffect } from "react";
 import { updateCategory } from "@/app/actions";
-import { X, Save, Plus, Minus, Divide, Equal, ArrowRightLeft } from "lucide-react";
+import { X, Save, Plus, Minus, Divide, Equal, ArrowRightLeft, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 // Helper: Determine if the current month is a payment month for a frequency category
@@ -207,34 +207,43 @@ export function TrackedBudgetList() {
     return (
         <>
             <section className="mb-8">
-                <button
-                    onClick={() => setCollapsed(!collapsed)}
-                    className="flex justify-between items-center w-full px-1 mb-3 group"
-                >
-                    <h2 className="text-xs uppercase font-bold tracking-widest text-stone-400 group-hover:text-stone-600 transition-colors">
-                        Pinned Budgets ({budgets.length})
-                    </h2>
-                    <svg
-                        className={`w-4 h-4 text-stone-400 transition-transform ${collapsed ? '' : 'rotate-180'}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div className="flex justify-between items-center w-full px-1 mb-3">
+                    <button
+                        onClick={() => setCollapsed(!collapsed)}
+                        className="flex items-center gap-2 group"
                     >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
+                        <h2 className="text-xs uppercase font-bold tracking-widest text-stone-400 group-hover:text-stone-600 transition-colors">
+                            Pinned Budgets ({budgets.length})
+                        </h2>
+                    </button>
+
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setShowDepleted(!showDepleted)}
+                            className="text-stone-400 hover:text-stone-600 transition-colors p-1"
+                            title={showDepleted ? "Hide Completed" : "Show Completed"}
+                        >
+                            {showDepleted ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+
+                        <button
+                            onClick={() => setCollapsed(!collapsed)}
+                            className="text-stone-400 hover:text-stone-600 transition-colors p-1"
+                        >
+                            <svg
+                                className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
 
                 {!collapsed && (
                     <div className="flex flex-col gap-3">
-                        <div className="flex justify-end px-1">
-                            <button
-                                onClick={() => setShowDepleted(!showDepleted)}
-                                className="text-[10px] uppercase font-bold tracking-wider text-stone-400 hover:text-stone-600 transition-colors"
-                            >
-                                {showDepleted ? "Hide Completed" : "Show Completed"}
-                            </button>
-                        </div>
-
                         {budgets
                             .filter(b => showDepleted || b.remaining > 0)
                             .map(b => {
