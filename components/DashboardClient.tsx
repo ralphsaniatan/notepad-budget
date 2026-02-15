@@ -80,8 +80,47 @@ export function DashboardClient({ initialData }: DashboardData) {
 
     // Calculate Totals from Live Local Data
     // We need committed categories for "Safe to Spend"
+    // Helper for Frequency Logic
+    const isPaymentMonth = (frequencyStart: string | undefined | null, freq: number, currentIso: string) => {
+        if (!frequencyStart || freq <= 1) return true;
+
+        // frequency_start is stored as 'YYYY-MM-DD' in DB (e.g. '2026-02-01')
+        // We only care about Year/Month matching
+        const start = new Date(frequencyStart);
+        const current = new Date(currentIso);
+
+        // Calculate difference in months
+        const diff = (current.getFullYear() - start.getFullYear()) * 12 + (current.getMonth() - start.getMonth());
+
+        // If diff is negative (started in future), it's not a payment month yet
+        if (diff < 0) return false;
+
+        return diff % freq === 0;
+    };
+
     const committedCategories = categories.filter(c => c.type === 'fixed' || c.budget_limit > 0);
-    const totalCommitments = committedCategories.reduce((acc, c) => acc + Number(c.budget_limit), 0);
+
+    // Calculate Commitments based on Frequency
+    const totalCommitments = committedCategories.reduce((acc, c) => {
+        const limit = Number(c.budget_limit);
+        const freq = c.frequency_months || 1;
+
+        if (freq > 1) {
+            // Check if this specific month is a "Payment Month"
+            const due = isPaymentMonth(c.frequency_start, freq, isoMonthStr);
+            if (due) {
+                // Payment Month: The FULL bill is due (monthly * freq)
+                return acc + (limit * freq);
+            } else {
+                // Off Month: We just set aside the monthly portion
+                return acc + limit;
+            }
+        }
+
+        // Standard monthly commitment
+        return acc + limit;
+    }, 0);
+
     breakdown.commitments = totalCommitments;
 
     currentMonthTransactions.forEach(tx => {
