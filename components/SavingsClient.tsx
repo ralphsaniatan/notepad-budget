@@ -142,11 +142,16 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
     const getSuggestion = (g: any) => {
         const now = new Date();
         const target = new Date(g.target_date);
-        const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+        const diffTime = target.getTime() - now.getTime();
         const remaining = g.target_amount - g.current_amount;
+
         if (remaining <= 0) return "Reached!";
-        if (months <= 0) return "Due Now!";
-        return `Save ~${currency(remaining / months)}/mo`;
+        if (diffTime <= 0) return "Due / Past Due";
+
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const months = Math.max(1, Math.ceil(diffDays / 30.44)); // Average days/month
+
+        return `Save ~${currency(remaining / months)}/mo for ${months} mo${months > 1 ? 's' : ''}`;
     };
 
     return (
@@ -217,21 +222,6 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                             if (progress >= 33) barColor = "bg-yellow-500";
                             if (progress >= 66) barColor = "bg-green-500";
 
-                            // Time Remaining Calculation
-                            const getTimeRemaining = (targetStr: string) => {
-                                const now = new Date();
-                                const target = new Date(targetStr);
-                                const diffTime = target.getTime() - now.getTime();
-                                if (diffTime <= 0) return "Due / Past Due";
-
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                const months = Math.floor(diffDays / 30);
-                                const days = diffDays % 30;
-
-                                if (months > 0) return `${months}m, ${days}d left`;
-                                return `${days}d left`;
-                            };
-
                             return (
                                 <PaperCard key={g.id} className="p-6 relative overflow-hidden group">
                                     <div className="flex justify-between items-start mb-4">
@@ -245,9 +235,6 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-xs text-stone-400 font-mono font-bold">
                                                     Due: {new Date(g.target_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                </span>
-                                                <span className="bg-stone-100 text-stone-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                                    {getTimeRemaining(g.target_date)}
                                                 </span>
                                             </div>
                                         </div>
