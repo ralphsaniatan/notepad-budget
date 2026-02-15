@@ -28,6 +28,9 @@ export function TrackedBudgetList() {
     const [editingBudget, setEditingBudget] = useState<LocalCategory | null>(null);
     const [editLimit, setEditLimit] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    const [isTransferring, setIsTransferring] = useState(false);
+    const [transferTargetId, setTransferTargetId] = useState("");
+    const [transferAmount, setTransferAmount] = useState("");
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
