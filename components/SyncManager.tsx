@@ -220,12 +220,13 @@ export function SyncManager() {
                 }
             }
 
-            // 2. Sync Categories
+            // 2. Sync Categories (Create)
             const pendingCats = await db.categories.where('sync_status').equals('created').toArray();
             for (const cat of pendingCats) {
                 try {
                     const commitType = cat.type === 'fixed' ? 'fixed' : null;
-                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned);
+                    // Pass frequency fields
+                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned, cat.frequency_months, cat.frequency_start);
                     if (res.success) {
                         await db.categories.update(cat.id, { sync_status: 'synced' });
                         synced++;
@@ -235,6 +236,25 @@ export function SyncManager() {
                 } catch (e) {
                     failed++;
                     console.error("SyncManager: Failed to sync category", cat.id, e);
+                }
+            }
+
+            // 2b. Sync Categories (Update)
+            const updatedCats = await db.categories.where('sync_status').equals('updated').toArray();
+            for (const cat of updatedCats) {
+                try {
+                    const commitType = cat.type === 'fixed' ? 'fixed' : null;
+                    const res = await updateCategory(cat.id, cat.name, commitType, cat.budget_limit, cat.is_pinned, cat.frequency_months, cat.frequency_start);
+                    if (res.success) {
+                        await db.categories.update(cat.id, { sync_status: 'synced' });
+                        synced++;
+                    } else {
+                        failed++;
+                        console.error("SyncManager: Failed to update category", cat.id, res.error);
+                    }
+                } catch (e) {
+                    failed++;
+                    console.error("SyncManager: Failed to sync category update", cat.id, e);
                 }
             }
 

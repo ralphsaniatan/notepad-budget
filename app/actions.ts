@@ -122,7 +122,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             .from('categories')
             .select('id, budget_limit, is_pinned, balance, frequency_months, frequency_start')
             .eq('user_id', user.id)
-            .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true');
+            .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0');
 
         let totalCommitments = 0;
         let reservedBalance = 0;
