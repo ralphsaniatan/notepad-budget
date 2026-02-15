@@ -15,7 +15,7 @@ type CatType = 'fixed' | 'needs' | 'wants';
 type Category = {
     id: string;
     name: string;
-    commitment_type: 'fixed' | 'variable_fixed' | null;
+    commitment_type: 'fixed' | 'variable_fixed' | 'wants' | null;
     is_commitment: boolean;
     budget_limit: number;
     is_pinned?: boolean;
@@ -61,7 +61,8 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
         // Map type to DB format
         const commitmentType = selectedType === 'fixed' ? 'fixed'
             : selectedType === 'needs' ? 'variable_fixed'
-                : null;
+                : selectedType === 'wants' ? 'wants'
+                    : null;
 
         // Optimistic add
         const newCat: Category = {
@@ -395,7 +396,7 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
 function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category: Category, onClose: () => void, onUpdate: (c: Category) => void, onDelete: (id: string) => void }) {
     const [name, setName] = useState(category.name);
     const initialType = category.commitment_type || (category.is_commitment ? 'fixed' : null);
-    const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
+    const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | 'wants' | null>(initialType);
     const [budgetLimit, setBudgetLimit] = useState((category.budget_limit * (category.frequency_months || 1)).toString());
     const [frequency, setFrequency] = useState(category.frequency_months || 1);
     const [frequencyStart, setFrequencyStart] = useState(() => {
@@ -475,6 +476,12 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                             >
                                 <div className="text-sm font-bold">Needs</div>
                             </button>
+                            <button
+                                onClick={() => setCommitmentType('wants')}
+                                className={`p-3 rounded-lg border text-center transition-all ${commitmentType === 'wants' ? "bg-emerald-600 text-white border-emerald-600" : "bg-white border-stone-200 text-stone-600 hover:border-stone-400"}`}
+                            >
+                                <div className="text-sm font-bold">Wants</div>
+                            </button>
                         </div>
                     </div>
 
@@ -492,7 +499,11 @@ function EditCategorySheet({ category, onClose, onUpdate, onDelete }: { category
                     {commitmentType && (
                         <div className="space-y-4 animate-in slide-in-from-top-1 fade-in duration-200">
                             {/* Frequency Selector */}
-                            {(commitmentType === 'fixed' || commitmentType === 'variable_fixed') && (
+                            {/* Wants categories are also monthly usually, but allow frequency if needed? 
+                                Typically Wants are monthly budgets. But user might have yearly want.
+                                Let's allow frequency for all typed categories.
+                             */}
+                            {(commitmentType === 'fixed' || commitmentType === 'variable_fixed' || commitmentType === 'wants') && (
                                 <>
                                     <div className="space-y-2">
                                         <div className="flex justify-between">
