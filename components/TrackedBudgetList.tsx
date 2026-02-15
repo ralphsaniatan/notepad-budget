@@ -350,7 +350,16 @@ export function TrackedBudgetList() {
                             </button>
 
                             <button
-                                onClick={() => setIsTransferring(true)}
+                                onClick={() => {
+                                    setIsTransferring(true);
+                                    setTransferTargetId("");
+                                    const current = budgets.find(b => b.id === editingBudget.id);
+                                    if (current && current.remaining > 0) {
+                                        setTransferAmount(current.remaining.toFixed(2));
+                                    } else {
+                                        setTransferAmount("");
+                                    }
+                                }}
                                 className="w-full py-3 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl font-bold flex items-center justify-center gap-2"
                             >
                                 <ArrowRightLeft size={16} />
