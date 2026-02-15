@@ -1,12 +1,9 @@
-"use client";
-
 import { PaperCard } from "@/components/ui/PaperCard";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, LocalCategory } from "@/lib/db";
 import { useState, useEffect } from "react";
-import { updateCategory } from "@/app/actions";
-import { X, Save, Plus, Minus, Divide, Equal, ArrowRightLeft, Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
+import { CategorySheet, Category } from "@/components/CategorySheet";
 
 // Helper: Determine if the current month is a payment month for a frequency category
 function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMonths: number, currentIsoMonth: string): boolean {
@@ -26,12 +23,7 @@ export function TrackedBudgetList() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [collapsed, setCollapsed] = useState(false);
     const [editingBudget, setEditingBudget] = useState<LocalCategory | null>(null);
-    const [editLimit, setEditLimit] = useState("");
-    const [isSaving, setIsSaving] = useState(false);
-    const [isTransferring, setIsTransferring] = useState(false);
-    const [transferTargetId, setTransferTargetId] = useState("");
-    const [transferAmount, setTransferAmount] = useState("");
-    const [showDepleted, setShowDepleted] = useState(true);
+    const [showDepleted, setShowDepleted] = useState(false);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -87,7 +79,8 @@ export function TrackedBudgetList() {
     });
 
     // Sort: Positive remaining first, then zero/negative
-    budgets.sort((a, b) => {
+    // Sort: Positive remaining first, then zero/negative
+    budgets.sort((a: any, b: any) => {
         const aZero = a.remaining <= 0;
         const bZero = b.remaining <= 0;
         if (aZero && !bZero) return 1;
@@ -97,105 +90,9 @@ export function TrackedBudgetList() {
 
     const handleOpenEdit = (budget: typeof budgets[0]) => {
         setEditingBudget(budget);
-        setEditLimit(budget.budget_limit.toFixed(2));
     };
 
-    // Math Expression Evaluator
-    const evaluateMathExpression = (expr: string): number | null => {
-        try {
-            const sanitized = expr.replace(/[^0-9+\-*/.() ]/g, '');
-            if (!sanitized) return null;
-            const result = new Function('return ' + sanitized)();
-            return typeof result === 'number' && isFinite(result) ? result : null;
-        } catch {
-            return null;
-        }
-    };
 
-    const computeAndSetLimit = () => {
-        const result = evaluateMathExpression(editLimit);
-        if (result !== null) {
-            setEditLimit(result.toFixed(2));
-        }
-    };
-
-    const handleSave = async () => {
-        if (!editingBudget) return;
-        setIsSaving(true);
-
-        const newLimit = parseFloat(editLimit) || 0;
-
-        try {
-            // Update local DB first (optimistic)
-            await db.categories.update(editingBudget.id, { budget_limit: newLimit });
-
-            // Sync to server
-            const res = await updateCategory(
-                editingBudget.id,
-                editingBudget.name,
-                editingBudget.type === 'fixed' ? 'fixed' : null,
-                newLimit,
-                editingBudget.is_pinned,
-                editingBudget.frequency_months || 1
-            );
-
-            if (res.success) {
-                toast.success(`${editingBudget.name} updated to AED ${newLimit}`);
-            } else {
-                toast.error(res.error || "Failed to save");
-            }
-        } catch (e) {
-            console.error("Save error", e);
-            toast.error("Failed to save");
-        } finally {
-            setIsSaving(false);
-            setEditingBudget(null);
-        }
-    };
-
-    const handleTransfer = async () => {
-        if (!editingBudget || !transferTargetId || !transferAmount) return;
-        setIsSaving(true);
-        const amount = parseFloat(transferAmount);
-        if (isNaN(amount) || amount <= 0) {
-            toast.error("Invalid amount");
-            setIsSaving(false);
-            return;
-        }
-
-        try {
-            // Optimistic Update
-            const source = editingBudget;
-            await db.categories.update(source.id, { balance: (source.balance || 0) - amount });
-
-            const targetCat = await db.categories.get(transferTargetId);
-            if (targetCat) {
-                await db.categories.update(transferTargetId, { balance: (targetCat.balance || 0) + amount });
-            }
-
-            // Sync
-            const { transferCategoryBalance } = await import("@/app/actions"); // Dynamic import to avoid circular dep issues if any, or just standard
-            const res = await transferCategoryBalance(source.id, transferTargetId, amount);
-
-            if (res.success) {
-                toast.success("Transfer successful");
-                setIsTransferring(false);
-                setEditingBudget(null);
-                setTransferAmount("");
-                setTransferTargetId("");
-            } else {
-                toast.error(res.error || "Transfer failed");
-                // Revert optimistic update
-                await db.categories.update(source.id, { balance: source.balance });
-                if (targetCat) await db.categories.update(transferTargetId, { balance: targetCat.balance });
-            }
-        } catch (e) {
-            console.error(e);
-            toast.error("Transfer failed");
-        } finally {
-            setIsSaving(false);
-        }
-    };
 
     return (
         <>
@@ -290,160 +187,22 @@ export function TrackedBudgetList() {
                 )}
             </section>
 
-            {/* Edit Dialog */}
-            {editingBudget && !isTransferring && (
-                <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-t-2xl p-6 pb-10 space-y-6">
-                        {/* Header */}
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-lg font-bold text-stone-900">Edit Budget</h2>
-                            <button onClick={() => setEditingBudget(null)} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        {/* Category Name */}
-                        <div className="text-center">
-                            <span className="text-stone-400 text-xs uppercase tracking-widest">{editingBudget.name}</span>
-                        </div>
-
-                        {/* Budget Limit Input */}
-                        <div className="space-y-2">
-                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                Monthly Limit (AED)
-                            </label>
-                            <input
-                                type="text"
-                                inputMode="text"
-                                value={editLimit}
-                                onChange={e => setEditLimit(e.target.value)}
-                                onBlur={computeAndSetLimit}
-                                placeholder="0.00 or 100+50"
-                                autoFocus
-                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-3xl font-mono font-bold outline-none focus:border-stone-900 text-center"
-                            />
-                            {/* Math Operator Buttons */}
-                            <div className="flex justify-center gap-2 pt-2">
-                                {['+', '-', '×', '÷'].map(op => (
-                                    <button
-                                        key={op}
-                                        type="button"
-                                        onClick={() => {
-                                            const symbol = op === '×' ? '*' : op === '÷' ? '/' : op;
-                                            setEditLimit(prev => prev + symbol);
-                                        }}
-                                        className="w-10 h-10 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold text-lg transition-colors"
-                                    >
-                                        {op}
-                                    </button>
-                                ))}
-                                <button
-                                    type="button"
-                                    onClick={computeAndSetLimit}
-                                    className="w-10 h-10 rounded-lg bg-stone-800 hover:bg-stone-700 text-white font-bold text-lg transition-colors"
-                                >
-                                    =
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Spent Info */}
-                        <div className="text-center text-sm text-stone-400">
-                            Spent this month: <span className="font-bold text-stone-700">AED {budgets.find(b => b.id === editingBudget.id)?.spent.toFixed(2) || '0.00'}</span>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="space-y-3">
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="w-full py-4 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                <Save size={18} />
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    setIsTransferring(true);
-                                    setTransferTargetId("");
-                                    const current = budgets.find(b => b.id === editingBudget.id);
-                                    if (current && current.remaining > 0) {
-                                        setTransferAmount(current.remaining.toFixed(2));
-                                    } else {
-                                        setTransferAmount("");
-                                    }
-                                }}
-                                className="w-full py-3 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl font-bold flex items-center justify-center gap-2"
-                            >
-                                <ArrowRightLeft size={16} />
-                                Move Money
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Transfer Dialog */}
-            {isTransferring && editingBudget && (
-                <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-t-2xl p-6 pb-10 space-y-6">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-lg font-bold text-stone-900">Move Money</h2>
-                            <button onClick={() => setIsTransferring(false)} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="p-4 bg-stone-50 rounded-xl space-y-2">
-                                <span className="text-xs uppercase font-bold text-stone-400 tracking-widest">From</span>
-                                <div className="font-bold text-stone-900">{editingBudget.name}</div>
-                                <div className="text-xs text-stone-400">Available Balance: AED {(editingBudget.balance || 0).toFixed(2)}</div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <span className="text-xs uppercase font-bold text-stone-400 tracking-widest">To Category</span>
-                                <select
-                                    value={transferTargetId}
-                                    onChange={e => setTransferTargetId(e.target.value)}
-                                    className="w-full p-4 bg-white border border-stone-200 rounded-xl font-bold text-stone-900 outline-none focus:border-stone-900"
-                                >
-                                    <option value="">Select Category</option>
-                                    {categories
-                                        .filter(c => c.id !== editingBudget.id)
-                                        .sort((a, b) => a.name.localeCompare(b.name))
-                                        .map(c => (
-                                            <option key={c.id} value={c.id}>
-                                                {c.name}
-                                            </option>
-                                        ))
-                                    }
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <span className="text-xs uppercase font-bold text-stone-400 tracking-widest">Amount</span>
-                                <input
-                                    type="number"
-                                    value={transferAmount}
-                                    onChange={e => setTransferAmount(e.target.value)}
-                                    placeholder="0.00"
-                                    className="w-full p-4 bg-white border border-stone-200 rounded-xl font-mono font-bold text-2xl text-stone-900 outline-none focus:border-stone-900"
-                                />
-                            </div>
-
-                            <button
-                                onClick={handleTransfer}
-                                disabled={isSaving || !transferTargetId || !transferAmount}
-                                className="w-full py-4 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <ArrowRightLeft size={18} />
-                                {isSaving ? "Transferring..." : "Confirm Transfer"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {/* Standardized CategorySheet */}
+            {editingBudget && (
+                <CategorySheet
+                    category={{
+                        ...editingBudget,
+                        commitment_type: editingBudget.type === 'fixed' ? 'fixed' : null,
+                        is_commitment: editingBudget.type === 'fixed',
+                    } as Category}
+                    allCategories={categories.map(c => ({
+                        ...c,
+                        commitment_type: c.type === 'fixed' ? 'fixed' : null,
+                        is_commitment: c.type === 'fixed'
+                    } as Category))}
+                    onClose={() => setEditingBudget(null)}
+                    onSave={() => setEditingBudget(null)}
+                />
             )}
         </>
     );
