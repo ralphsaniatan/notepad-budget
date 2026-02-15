@@ -587,7 +587,7 @@ export async function addDebt(name: string, balance: number, rate: number) {
 
 export async function addCategory(
     name: string,
-    commitment_type: 'fixed' | 'variable_fixed' | 'wants' | null,
+    commitment_type: 'fixed' | 'variable_fixed' | null,
     budget_limit: number,
     is_pinned: boolean = false,
     frequency_months: number = 1,
@@ -800,7 +800,7 @@ export async function deleteSavingsGoal(id: string) {
 export async function updateCategory(
     id: string,
     name: string,
-    commitment_type: 'fixed' | 'variable_fixed' | 'wants' | null,
+    commitment_type: 'fixed' | 'variable_fixed' | null,
     budget_limit: number,
     is_pinned: boolean = false,
     frequency_months: number = 1,
