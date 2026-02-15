@@ -159,6 +159,17 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                 </div>
             </header>
 
+            {/* Summary Card - Sticky Note Style */}
+            {goals.length > 0 && (
+                <div className="relative bg-emerald-50 border-l-4 border-emerald-400 rounded-r-xl shadow-md p-4 mb-6">
+                    <div className="absolute -top-1 left-4 w-8 h-3 bg-emerald-300/70 rounded-sm transform -rotate-1"></div>
+                    <h3 className="text-emerald-700 text-[10px] uppercase font-bold tracking-widest mb-1">Total Remaining to Save</h3>
+                    <div className="text-2xl font-mono font-bold text-emerald-900">
+                        {currency(goals.reduce((acc, g) => acc + (Math.max(0, g.target_amount - g.current_amount)), 0))}
+                    </div>
+                </div>
+            )}
+
             {/* List */}
             <div className="space-y-4">
                 {goals.length === 0 ? (
@@ -167,58 +178,80 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                         <p className="text-stone-400 text-sm">No money goals yet.</p>
                     </PaperCard>
                 ) : (
-                    goals.map(g => {
-                        const progress = Math.min(100, (g.current_amount / g.target_amount) * 100);
+                    [...goals]
+                        .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())
+                        .map(g => {
+                            const progress = Math.min(100, (g.current_amount / g.target_amount) * 100);
 
-                        let barColor = "bg-red-500";
-                        if (progress >= 33) barColor = "bg-yellow-500";
-                        if (progress >= 66) barColor = "bg-green-500";
+                            let barColor = "bg-red-500";
+                            if (progress >= 33) barColor = "bg-yellow-500";
+                            if (progress >= 66) barColor = "bg-green-500";
 
-                        return (
-                            <PaperCard key={g.id} className="p-6 relative overflow-hidden group">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start">
-                                            <h3 className="font-bold text-stone-900 text-lg">{g.name}</h3>
-                                            <button onClick={() => setEditingGoal(g)} className="text-stone-300 hover:text-stone-600 px-2 py-1 rounded hover:bg-stone-50 transition-colors">
-                                                <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
-                                            </button>
+                            // Time Remaining Calculation
+                            const getTimeRemaining = (targetStr: string) => {
+                                const now = new Date();
+                                const target = new Date(targetStr);
+                                const diffTime = target.getTime() - now.getTime();
+                                if (diffTime <= 0) return "Due / Past Due";
+
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                const months = Math.floor(diffDays / 30);
+                                const days = diffDays % 30;
+
+                                if (months > 0) return `${months}m, ${days}d left`;
+                                return `${days}d left`;
+                            };
+
+                            return (
+                                <PaperCard key={g.id} className="p-6 relative overflow-hidden group">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start">
+                                                <h3 className="font-bold text-stone-900 text-lg">{g.name}</h3>
+                                                <button onClick={() => setEditingGoal(g)} className="text-stone-300 hover:text-stone-600 px-2 py-1 rounded hover:bg-stone-50 transition-colors">
+                                                    <span className="text-xs uppercase font-bold tracking-widest">Edit</span>
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-xs text-stone-400 font-mono font-bold">
+                                                    Due: {new Date(g.target_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                </span>
+                                                <span className="bg-stone-100 text-stone-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                                    {getTimeRemaining(g.target_date)}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <p className="text-xs text-stone-400 font-mono font-bold mt-1">
-                                            Due: {new Date(g.target_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                                        </p>
                                     </div>
-                                </div>
 
-                                <div className="flex justify-between items-end mb-2">
-                                    <div className="text-[10px] text-stone-500 font-bold bg-yellow-100 px-2 py-1 rounded transform -rotate-1">
-                                        {getSuggestion(g)}
+                                    <div className="flex justify-between items-end mb-2">
+                                        <div className="text-[10px] text-stone-500 font-bold bg-yellow-100 px-2 py-1 rounded transform -rotate-1">
+                                            {getSuggestion(g)}
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-mono font-bold text-stone-900">{currency(g.current_amount)}</div>
+                                            <div className="text-[10px] text-stone-400 uppercase tracking-widest">of {currency(g.target_amount)}</div>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="font-mono font-bold text-stone-900">{currency(g.current_amount)}</div>
-                                        <div className="text-[10px] text-stone-400 uppercase tracking-widest">of {currency(g.target_amount)}</div>
+
+                                    {/* Progress Bar */}
+                                    <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden mb-3">
+                                        <div
+                                            className={clsx("h-full transition-all duration-500 rounded-full", barColor)}
+                                            style={{ width: `${progress}%` }}
+                                        ></div>
                                     </div>
-                                </div>
 
-                                {/* Progress Bar */}
-                                <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden mb-3">
-                                    <div
-                                        className={clsx("h-full transition-all duration-500 rounded-full", barColor)}
-                                        style={{ width: `${progress}%` }}
-                                    ></div>
-                                </div>
-
-                                <div className="mt-4">
-                                    <button
-                                        onClick={() => setContributeGoal(g)}
-                                        className="w-full bg-stone-900 text-white text-xs font-bold px-4 py-3 rounded-lg hover:bg-black transition-colors"
-                                    >
-                                        + Contribute
-                                    </button>
-                                </div>
-                            </PaperCard>
-                        );
-                    })
+                                    <div className="mt-4">
+                                        <button
+                                            onClick={() => setContributeGoal(g)}
+                                            className="w-full bg-stone-900 text-white text-xs font-bold px-4 py-3 rounded-lg hover:bg-black transition-colors"
+                                        >
+                                            + Contribute
+                                        </button>
+                                    </div>
+                                </PaperCard>
+                            );
+                        })
                 )}
             </div>
 
