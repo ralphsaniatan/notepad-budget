@@ -65,16 +65,9 @@ export function TrackedBudgetList() {
             effectiveLimit = paymentMonth ? limit * freq : limit;
         }
 
-        let remaining = effectiveLimit - spent;
-        if (freq > 1 && paymentMonth) {
-            remaining = (effectiveLimit + balance) - spent;
-        } else if (freq > 1) {
-            remaining = (limit + balance) - spent;
-        }
-
-        const totalAvailable = freq > 1
-            ? (paymentMonth ? effectiveLimit + balance : limit + balance)
-            : limit;
+        // Fix: Always include balance (carryover + transfers) in available funds
+        const totalAvailable = effectiveLimit + balance;
+        const remaining = totalAvailable - spent;
         const percent = totalAvailable > 0 ? (spent / totalAvailable) * 100 : 0;
 
         let status: 'ok' | 'warning' | 'over' = 'ok';
