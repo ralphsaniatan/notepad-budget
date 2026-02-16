@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, ArrowRightLeft, Save, Check, Pencil } from "lucide-react";
 import { addCategory, updateCategory, deleteCategory, transferCategoryBalance } from "@/app/actions";
 import { toast } from "sonner";
@@ -209,8 +210,13 @@ export function CategorySheet({
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    if (!mounted) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center">
                     <div>
@@ -444,6 +450,7 @@ export function CategorySheet({
                     </div>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

@@ -123,6 +123,8 @@ export function DashboardClient({ initialData }: DashboardData) {
 
     breakdown.commitments = totalCommitments;
 
+    let uncommittedSpent = 0;
+
     currentMonthTransactions.forEach(tx => {
         const amt = Number(tx.amount);
         if (tx.type === 'income') {
@@ -131,10 +133,19 @@ export function DashboardClient({ initialData }: DashboardData) {
         } else {
             spent += amt;
             breakdown.spent += amt;
+
+            // Logic Fix: Only subtract from Safe-to-Spend if it's NOT a committed category
+            // Committed categories are already subtracted via `totalCommitments`
+            const category = categories.find(c => c.id === tx.category_id);
+            const isCommitted = category && (category.type === 'fixed' || category.budget_limit > 0);
+
+            if (!isCommitted) {
+                uncommittedSpent += amt;
+            }
         }
     });
 
-    safeToSpend = (income + rollover) - totalCommitments - spent;
+    safeToSpend = (income + rollover) - totalCommitments - uncommittedSpent;
 
     // Disable closing for now in Local Mode until we build full month-management logic logic
     const canClose = false;
