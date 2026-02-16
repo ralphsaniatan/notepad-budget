@@ -49,13 +49,58 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 
         const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-        // Fetch or Create Month
-        let { data: month } = await supabase
-            .from('months')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('iso_month', isoMonth)
-            .single();
+        // 2. Parallel Data Fetching
+        const [
+            monthRes,
+            transactionsRes,
+            committedCategoriesRes,
+            debtsRes,
+            categoriesRes
+        ] = await Promise.all([
+            // Month
+            supabase
+                .from('months')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('iso_month', isoMonth)
+                .single(),
+            // Transactions
+            supabase
+                .from('transactions')
+                .select(`
+                    *,
+                    categories ( name, is_commitment, commitment_type ),
+                    debts ( name )
+                `)
+                .eq('user_id', user.id)
+                .gte('date', isoMonth)
+                .order('date', { ascending: false })
+                .order('created_at', { ascending: false }),
+            // Committed Categories
+            supabase
+                .from('categories')
+                .select('id, budget_limit, is_pinned, balance, frequency_months, frequency_start')
+                .eq('user_id', user.id)
+                .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0'),
+            // Debts
+            supabase
+                .from('debts')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('total_balance', { ascending: false }),
+            // Categories List
+            supabase
+                .from('categories')
+                .select('id, name')
+                .eq('user_id', user.id)
+                .order('name')
+        ]);
+
+        const month = monthRes.data;
+        const allTransactions = transactionsRes.data;
+        const committedCategories = committedCategoriesRes.data;
+        const debts = debtsRes.data;
+        const categories = categoriesRes.data;
 
         // Safety Helper
         const safeNum = (val: any) => {
@@ -63,22 +108,9 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             return isNaN(n) ? 0 : n;
         };
 
-        // 2. Data Aggregation
+        // 3. Data Aggregation
         let income = safeNum(month?.income);
         const rollover = safeNum(month?.rollover);
-
-        // Get recent transactions for the list
-        const { data: allTransactions } = await supabase
-            .from('transactions')
-            .select(`
-                *,
-                categories ( name, is_commitment, commitment_type ),
-                debts ( name )
-            `)
-            .eq('user_id', user.id)
-            .gte('date', isoMonth) // Only current month transactions for calculations
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false });
 
         const transactions = allTransactions || [];
 
@@ -117,13 +149,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             }
         });
 
-        // 3. Get Commitments & Calculate Overspend
-        const { data: committedCategories } = await supabase
-            .from('categories')
-            .select('id, budget_limit, is_pinned, balance, frequency_months, frequency_start')
-            .eq('user_id', user.id)
-            .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0');
-
         let totalCommitments = 0;
         let reservedBalance = 0;
 
@@ -161,20 +186,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // Safe To Spend = (Income + Rollover) - Total Commitments (Envelopes) - Variable Spent - Overspend Penalty - Reserved Balances
         // Notice: 'Overspend' is the amount EXCEEDING the (limit + balance).
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend - reservedBalance;
-
-        // 4. Get Debts
-        const { data: debts } = await supabase
-            .from('debts')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('total_balance', { ascending: false });
-
-        // 5. Get Categories for Dropdown (non-commitment)
-        const { data: categories } = await supabase
-            .from('categories')
-            .select('id, name')
-            .eq('user_id', user.id)
-            .order('name');
 
         // Map transactions for UI
         const recentTransactions = transactions.map((tx: any) => {
@@ -373,7 +384,8 @@ export async function addTransaction(
     type: 'expense' | 'income' | 'debt_payment',
     categoryId?: string,
     debtId?: string,
-    customDate?: string // Optional: ISO date string from offline sync
+    customDate?: string, // Optional: ISO date string from offline sync
+    id?: string // Optional: Client-generated UUID
 ) {
     const supabase = await createClient();
 
@@ -405,6 +417,7 @@ export async function addTransaction(
     const { data: newTx, error } = await supabase
         .from('transactions')
         .insert({
+            id: id || undefined, // Use client ID if provided
             user_id: user.id,
             month_id: month!.id,
             amount: Number(amount),
@@ -554,7 +567,7 @@ export async function closeMonth() {
     }
 }
 
-export async function addDebt(name: string, balance: number, rate: number) {
+export async function addDebt(name: string, balance: number, rate: number, id?: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false };
@@ -562,6 +575,7 @@ export async function addDebt(name: string, balance: number, rate: number) {
     const { data, error } = await supabase
         .from('debts')
         .insert({
+            id: id || undefined,
             user_id: user.id,
             name,
             total_balance: balance,
@@ -582,7 +596,8 @@ export async function addCategory(
     budget_limit: number,
     is_pinned: boolean = false,
     frequency_months: number = 1,
-    frequency_start?: string
+    frequency_start?: string,
+    id?: string
 ) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -591,6 +606,7 @@ export async function addCategory(
     const { error } = await supabase
         .from('categories')
         .insert({
+            id: id || undefined,
             user_id: user.id,
             name,
             commitment_type,
@@ -929,6 +945,184 @@ export async function deleteDebt(id: string) {
     revalidatePath('/debts');
     return { success: true };
 }
+// --- Bulk Actions ---
+
+type BulkTransactionInput = {
+    id: string;
+    amount: number;
+    description: string;
+    type: 'expense' | 'income' | 'debt_payment';
+    date: string;
+    category_id?: string;
+    debt_id?: string;
+};
+
+export async function bulkCreateTransactions(transactions: BulkTransactionInput[]) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!transactions || transactions.length === 0) return { success: true };
+
+    // 1. Prepare Months
+    // Group transactions by ISO month to minimize month lookups/creations
+    const monthSet = new Set<string>();
+    transactions.forEach(tx => {
+        const d = new Date(tx.date);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        monthSet.add(iso);
+    });
+
+    const isoMonths = Array.from(monthSet);
+    const { data: existingMonths } = await supabase
+        .from('months')
+        .select('id, iso_month')
+        .eq('user_id', user.id)
+        .in('iso_month', isoMonths);
+
+    const existingMonthMap = new Map(existingMonths?.map(m => [m.iso_month, m.id]) || []);
+    const missingMonths = isoMonths.filter(iso => !existingMonthMap.has(iso));
+
+    if (missingMonths.length > 0) {
+        const { data: createdMonths } = await supabase
+            .from('months')
+            .insert(missingMonths.map(iso => ({ user_id: user.id, iso_month: iso })))
+            .select('id, iso_month');
+
+        createdMonths?.forEach(m => existingMonthMap.set(m.iso_month, m.id));
+    }
+
+    // 2. Prepare Inserts
+    const inserts = transactions.map(tx => {
+        const d = new Date(tx.date);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        const monthId = existingMonthMap.get(iso);
+
+        return {
+            id: tx.id,
+            user_id: user.id,
+            month_id: monthId, // Should exist now
+            amount: tx.amount,
+            description: tx.description,
+            type: tx.type,
+            date: tx.date,
+            category_id: tx.category_id || null,
+            debt_id: tx.debt_id || null,
+            created_at: new Date().toISOString()
+        };
+    });
+
+    const { error } = await supabase.from('transactions').insert(inserts);
+    if (error) return { success: false, error: error.message };
+
+    // 3. Update Debts
+    // Aggregate changes per debt
+    const debtChanges = new Map<string, number>();
+
+    transactions.forEach(tx => {
+        if (tx.debt_id) {
+            let change = 0;
+            if (tx.type === 'debt_payment') {
+                change = -tx.amount; // Reduces balance
+            } else if (tx.type === 'expense') {
+                change = tx.amount; // Increases balance
+            }
+            if (change !== 0) {
+                debtChanges.set(tx.debt_id, (debtChanges.get(tx.debt_id) || 0) + change);
+            }
+        }
+    });
+
+    if (debtChanges.size > 0) {
+        // Fetch current balances
+        const debtIds = Array.from(debtChanges.keys());
+        const { data: debts } = await supabase
+            .from('debts')
+            .select('id, total_balance')
+            .eq('user_id', user.id)
+            .in('id', debtIds);
+
+        const debtMap = new Map(debts?.map(d => [d.id, Number(d.total_balance)]) || []);
+
+        // Update each debt
+        // Since Supabase doesn't have bulk update with different values easily, we do Promise.all
+        const updates = Array.from(debtChanges.entries()).map(async ([debtId, change]) => {
+            const current = debtMap.get(debtId) || 0;
+            const newBalance = current + change;
+            await supabase.from('debts').update({ total_balance: newBalance }).eq('id', debtId);
+        });
+
+        await Promise.all(updates);
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+}
+
+type BulkCategoryInput = {
+    id: string;
+    name: string;
+    budget_limit: number;
+    type: 'variable' | 'fixed'; // Legacy local type
+    commitment_type?: 'fixed' | 'variable_fixed' | null;
+    is_pinned: boolean;
+    frequency_months?: number;
+    frequency_start?: string;
+};
+
+export async function bulkCreateCategories(categories: BulkCategoryInput[]) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!categories || categories.length === 0) return { success: true };
+
+    const inserts = categories.map(c => ({
+        id: c.id,
+        user_id: user.id,
+        name: c.name,
+        commitment_type: c.commitment_type,
+        is_commitment: !!c.commitment_type,
+        budget_limit: c.budget_limit,
+        is_pinned: c.is_pinned,
+        frequency_months: c.frequency_months || 1,
+        frequency_start: (c.frequency_months || 1) > 1 ? (c.frequency_start || null) : null,
+        balance: 0
+    }));
+
+    const { error } = await supabase.from('categories').insert(inserts);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+}
+
+type BulkDebtInput = {
+    id: string;
+    name: string;
+    total_balance: number;
+    interest_rate: number;
+};
+
+export async function bulkCreateDebts(debts: BulkDebtInput[]) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (!debts || debts.length === 0) return { success: true };
+
+    const inserts = debts.map(d => ({
+        id: d.id,
+        user_id: user.id,
+        name: d.name,
+        total_balance: d.total_balance,
+        interest_rate: d.interest_rate
+    }));
+
+    const { error } = await supabase.from('debts').insert(inserts);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+}
+
 // --- Sync / Seeding Actions ---
 
 export async function getAllUserData() {
@@ -936,24 +1130,30 @@ export async function getAllUserData() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // Get Months (for context)
-    const { data: months } = await supabase.from('months').select('*').eq('user_id', user.id);
-
-    // Get Components
-    const { data: transactions } = await supabase.from('transactions').select('*').eq('user_id', user.id);
-    const { data: categories } = await supabase.from('categories').select('*').eq('user_id', user.id);
-    const { data: debts } = await supabase.from('debts').select('*').eq('user_id', user.id);
-    const { data: savings_goals } = await supabase.from('savings_goals').select('*').eq('user_id', user.id);
+    // Parallel Fetch
+    const [
+        monthsRes,
+        transactionsRes,
+        categoriesRes,
+        debtsRes,
+        savingsRes
+    ] = await Promise.all([
+        supabase.from('months').select('*').eq('user_id', user.id),
+        supabase.from('transactions').select('*').eq('user_id', user.id),
+        supabase.from('categories').select('*').eq('user_id', user.id),
+        supabase.from('debts').select('*').eq('user_id', user.id),
+        supabase.from('savings_goals').select('*').eq('user_id', user.id)
+    ]);
 
     return {
         success: true,
         data: {
             user_id: user.id,
-            transactions: transactions || [],
-            categories: categories || [],
-            debts: debts || [],
-            savings_goals: savings_goals || [],
-            months: months || []
+            transactions: transactionsRes.data || [],
+            categories: categoriesRes.data || [],
+            debts: debtsRes.data || [],
+            savings_goals: savingsRes.data || [],
+            months: monthsRes.data || []
         }
     };
 }

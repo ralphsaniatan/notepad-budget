@@ -129,7 +129,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         if (currentNewCatType === 'needs') serverCommitmentType = 'variable_fixed';
 
                         // Sync to server and mark as synced to prevent duplicate
-                        addCategory(newCatName, serverCommitmentType, budgetLimit / currentNewCatFrequency, currentIsPinned, currentNewCatFrequency)
+                        addCategory(newCatName, serverCommitmentType, budgetLimit / currentNewCatFrequency, currentIsPinned, currentNewCatFrequency, undefined, newCatId)
                             .then(() => db.categories.update(newCatId, { sync_status: 'synced' }))
                             .catch(console.error);
                         finalTargetId = newCatId;
