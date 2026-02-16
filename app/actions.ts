@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { unstable_noStore as noStore } from "next/cache";
+import { DashboardData, TrackedBudget, SavingsGoal } from "@/lib/types";
 
 // Helper: Determine if the current month is a payment month for a frequency category
 function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMonths: number, currentIsoMonth: string): boolean {
@@ -12,18 +13,6 @@ function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMont
     const monthsDiff = (currentDate.getFullYear() - startDate.getFullYear()) * 12 + (currentDate.getMonth() - startDate.getMonth());
     return monthsDiff >= 0 && monthsDiff % frequencyMonths === 0;
 }
-
-// Type definitions matching our schema
-type DashboardData = {
-    safeToSpend: number;
-    spent: number;
-    debts: { id: string, name: string, total_balance: number, interest_rate: number }[];
-    recentTransactions: { id: string, description: string, amount: number, type: 'income' | 'expense' | 'debt_payment', date: string, category_name?: string }[];
-    categories: { id: string, name: string }[];
-    breakdown?: { income: number, rollover: number, commitments: number, spent: number };
-    userId?: string;
-    email?: string;
-};
 
 // Fallback for initial state or error
 const DEFAULT_DASHBOARD: DashboardData = {
@@ -270,21 +259,6 @@ export async function getTransactions(offset: number = 0, limit: number = 10, mo
 }
 
 
-
-export type TrackedBudget = {
-    id: string;
-    name: string;
-    limit: number;
-    spent: number;
-    remaining: number;
-    status: 'ok' | 'warning' | 'over';
-    percent: number;
-    frequency_months?: number;
-    frequency_start?: string;
-    balance?: number;
-    target_total?: number;
-    is_payment_month?: boolean;
-};
 
 export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
     const supabase = await createClient();
@@ -667,14 +641,6 @@ export async function deleteTransaction(id: string) {
 }
 
 // --- Savings Goals Actions ---
-
-export type SavingsGoal = {
-    id: string;
-    name: string;
-    target_amount: number;
-    current_amount: number;
-    target_date: string;
-};
 
 export async function getSavingsGoals(): Promise<SavingsGoal[]> {
     const supabase = await createClient();

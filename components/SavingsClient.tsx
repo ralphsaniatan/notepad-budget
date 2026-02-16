@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { PaperCard } from "@/components/ui/PaperCard";
 import { Plus, X, PiggyBank } from "lucide-react";
-import { addSavingsGoal, contributeToSavings, updateSavingsGoal, deleteSavingsGoal, SavingsGoal } from "@/app/actions";
+import { addSavingsGoal, contributeToSavings, updateSavingsGoal, deleteSavingsGoal } from "@/app/actions";
+import { SavingsGoal } from "@/lib/types";
 import clsx from "clsx";
 import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
