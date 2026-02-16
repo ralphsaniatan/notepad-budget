@@ -111,7 +111,7 @@ export function CategorySheet({
         try {
             const limit = parseFloat(budgetLimit) || 0;
             const finalLimit = frequency > 1 ? limit / frequency : limit; // Store monthly limit
-            const startVal = frequency > 1 ? frequencyStart : undefined;
+            const startVal = frequency > 1 && frequencyStart ? `${frequencyStart}-01` : undefined;
 
             if (isEditing && category) {
                 // UPDATE
