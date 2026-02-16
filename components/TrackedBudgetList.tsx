@@ -46,11 +46,7 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
         const balance = cat.balance || 0;
         const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonthStr);
 
-        // Payment month logic
-        let effectiveLimit = limit;
-        if (freq > 1) {
-            effectiveLimit = paymentMonth ? limit * freq : limit;
-        }
+        const effectiveLimit = limit;
 
         // Fix: Always include balance (carryover + transfers) in available funds
         const totalAvailable = effectiveLimit + balance;
@@ -69,6 +65,7 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
             status,
             totalAvailable,
             effectiveLimit,
+            target_total: limit * freq,
             isPaymentMonth: paymentMonth
         };
     });
@@ -155,13 +152,20 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="text-right font-mono text-xs font-bold">
-                                                    <span className={isDepleted ? "text-stone-400" : getStatusColor(b.status)}>
-                                                        AED {Math.abs(b.remaining).toFixed(2)}
-                                                    </span>
-                                                    <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
-                                                        {b.status === 'over' ? 'Over' : 'Left'}
-                                                    </span>
+                                                <div className="text-right font-mono text-xs font-bold flex flex-col items-end">
+                                                    <div>
+                                                        <span className={isDepleted ? "text-stone-400" : getStatusColor(b.status)}>
+                                                            AED {Math.abs(b.remaining).toFixed(2)}
+                                                        </span>
+                                                        <span className="ml-1 text-[9px] uppercase text-stone-400 tracking-wider">
+                                                            {b.status === 'over' ? 'Over' : 'Left'}
+                                                        </span>
+                                                    </div>
+                                                    {b.isPaymentMonth && b.target_total && (
+                                                        <div className="text-[10px] text-stone-400 font-normal">
+                                                            Bill: {Math.abs(b.target_total).toFixed(0)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 

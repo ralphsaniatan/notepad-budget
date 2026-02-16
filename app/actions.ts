@@ -335,11 +335,7 @@ export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
         const freq = Number(c.frequency_months || 1);
         const paymentMonth = isPaymentMonth(c.frequency_start, freq, isoMonth);
 
-        // Payment month logic for frequency categories
-        let effectiveLimit = limit;
-        if (freq > 1) {
-            effectiveLimit = paymentMonth ? limit * freq : limit;
-        }
+        const effectiveLimit = limit;
 
         // Fix: Always include balance (carryover + transfers) in available funds
         const totalAvailable = effectiveLimit + balance;
@@ -509,10 +505,9 @@ export async function closeMonth() {
                     // Payment month: the full bill was due.
                     // Available was (limit * freq) + balance.
                     // After spending, remaining balance = max(0, (limit*freq + balance) - spent)
-                    // But we reset the fund since the cycle is complete.
-                    // Any overspend is already handled via dashboard overspend penalty.
-                    // Start fresh accumulation from 0.
-                    newBalance = 0;
+                    // We should KEEP any unspent amount in the balance for future.
+                    const available = (limit * freq) + currentBalance;
+                    newBalance = Math.max(0, available - spent);
                 } else {
                     // Accumulation month: Surplus = per-month limit - spent.
                     const surplus = limit - spent;

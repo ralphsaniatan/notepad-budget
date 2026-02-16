@@ -102,23 +102,7 @@ export function DashboardClient({ initialData }: DashboardData) {
 
     // Calculate Commitments based on Frequency
     const totalCommitments = committedCategories.reduce((acc, c) => {
-        const limit = Number(c.budget_limit);
-        const freq = c.frequency_months || 1;
-
-        if (freq > 1) {
-            // Check if this specific month is a "Payment Month"
-            const due = isPaymentMonth(c.frequency_start, freq, isoMonthStr);
-            if (due) {
-                // Payment Month: The FULL bill is due (monthly * freq)
-                return acc + (limit * freq);
-            } else {
-                // Off Month: We just set aside the monthly portion
-                return acc + limit;
-            }
-        }
-
-        // Standard monthly commitment
-        return acc + limit;
+        return acc + Number(c.budget_limit);
     }, 0);
 
     breakdown.commitments = totalCommitments;
@@ -235,8 +219,24 @@ export function DashboardClient({ initialData }: DashboardData) {
     };
 
     const handleCloseMonth = async () => {
-        // Placeholder
-        alert("Closing month must be done online for now.");
+        if (!confirm(`Are you sure you want to close ${currentMonthName}? This will calculate rollovers and update category balances.`)) return;
+
+        setIsSubmitting(true);
+        try {
+            const res = await closeMonth();
+            if (res.success) {
+                toast.success("Month Closed", { description: "Balances updated and new month created." });
+                // Refresh data
+                window.location.reload();
+            } else {
+                toast.error("Failed to close month", { description: res.error });
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error("An error occurred");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const displayTransactions = transactions.slice(0, limit);
@@ -279,6 +279,16 @@ export function DashboardClient({ initialData }: DashboardData) {
                         </button>
                         {showMonthPicker && (
                             <div className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-xl shadow-xl z-50 p-2 min-w-[200px]">
+                                <div className="mb-2 p-2 bg-stone-50 rounded-lg border border-stone-100">
+                                    <button
+                                        onClick={handleCloseMonth}
+                                        disabled={isSubmitting}
+                                        className="w-full py-2 bg-stone-900 text-white rounded-lg text-xs font-bold hover:bg-black transition-colors disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? "Processing..." : `Close ${currentMonthName}`}
+                                    </button>
+                                    <p className="text-[9px] text-stone-400 mt-1 text-center leading-tight">Calculates rollovers & carryovers</p>
+                                </div>
                                 <div className="grid grid-cols-3 gap-1">
                                     {Array.from({ length: 12 }, (_, i) => {
                                         const monthDate = new Date(currentDate.getFullYear(), i, 1);
