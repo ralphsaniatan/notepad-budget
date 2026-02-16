@@ -193,9 +193,7 @@ export function SavingsClient({ initialGoals }: { initialGoals: SavingsGoal[] })
                                     if (diffTime <= 0) return acc + remaining;
 
                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                    const months = Math.max(1, diffDays / 30); // Use float months for better accuracy or ceil? 
-                                    // User likely thinks in whole months. "5 months left" -> divide by 5.
-                                    // Let's use max(1, diffInMonths)
+                                    const months = Math.max(1, Math.ceil(diffDays / 30.44));
                                     return acc + (remaining / months);
                                 }, 0))}
                                 <span className="text-xs text-emerald-600 font-normal ml-1">/ mo</span>
@@ -359,9 +357,14 @@ function AddGoalForm({ onAdd, onClose, isSubmitting }: { onAdd: (n: string, a: s
             <button
                 onClick={() => onAdd(name, amount, date)}
                 disabled={isSubmitting || !name || !amount || !date}
-                className="w-full bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95"
+                className="w-full bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
             >
-                Start Plan
+                {isSubmitting ? (
+                    <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Adding...
+                    </>
+                ) : "Start Plan"}
             </button>
         </div>
     )
