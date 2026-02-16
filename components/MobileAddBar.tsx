@@ -1,196 +1,149 @@
-"use client";
+import { CategorySheet } from "./CategorySheet";
+import { LocalCategory } from "@/lib/db";
 
+// ... imports ...
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, ShoppingBag, Landmark, Check, Calculator } from "lucide-react";
+import { Plus, X, ShoppingBag, Landmark, Check, Calculator, Tag, Banknote } from "lucide-react";
 import clsx from "clsx";
 import { Spinner } from "@/components/ui/Spinner";
 import { db } from "@/lib/db";
 import { addCategory } from "@/app/actions";
 
 type TxType = 'expense' | 'income';
-type CatType = 'fixed' | 'needs' | 'wants';
 
 // Safe math expression evaluator (handles +, -, *, /)
 function evaluateMathExpression(expr: string): number | null {
-    // Remove all whitespace
     const cleaned = expr.replace(/\s/g, '');
-
-    // Check if it's just a plain number
-    if (/^[\d.]+$/.test(cleaned)) {
-        return parseFloat(cleaned);
-    }
-
-    // Only allow safe characters: digits, decimal, operators
-    if (!/^[\d.+\-*/()]+$/.test(cleaned)) {
-        return null;
-    }
-
+    if (/^[\d.]+$/.test(cleaned)) return parseFloat(cleaned);
+    if (!/^[\d.+\-*/()]+$/.test(cleaned)) return null;
     try {
-        // Use Function constructor for safe eval (no access to global scope)
         const result = new Function(`return (${cleaned})`)();
-        if (typeof result === 'number' && isFinite(result) && result >= 0) {
-            return Math.round(result * 100) / 100; // Round to 2 decimals
-        }
+        if (typeof result === 'number' && isFinite(result) && result >= 0) return Math.round(result * 100) / 100;
         return null;
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
 export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
-    categories: { id: string, name: string }[],
+    categories: LocalCategory[],
     debts: { id: string, name: string }[],
     onAdd: (type: TxType, amount: string, targetId?: string, desc?: string, debtId?: string) => void,
     isSubmitting: boolean
 }) {
     const router = useRouter();
-    const [isOpen, setIsOpen] = useState(false);
+    const [mode, setMode] = useState<'closed' | 'menu' | 'transaction' | 'category'>('closed');
     const amountRef = useRef<HTMLInputElement>(null);
 
-    // Form State
+    // Form State (Transaction)
     const [amount, setAmount] = useState("");
     const [description, setDescription] = useState("");
     const [targetId, setTargetId] = useState("");
     const [categorySearch, setCategorySearch] = useState("");
     const [type, setType] = useState<TxType>('expense');
 
+    // Category Creation State (for pre-filling)
+    const [initialCatName, setInitialCatName] = useState("");
+
     // Payment Source State
     const [paymentSource, setPaymentSource] = useState<'cash' | 'debt'>('cash');
     const [selectedDebtId, setSelectedDebtId] = useState("");
 
-    // Category Creation State
-    const [newCatType, setNewCatType] = useState<CatType>('wants');
-    const [newCatBudget, setNewCatBudget] = useState("");
-    const [newCatFrequency, setNewCatFrequency] = useState(1);
-    const [isPinned, setIsPinned] = useState(false);
-    const [isTypeConfirmed, setIsTypeConfirmed] = useState(false);
+    const handleOpenMenu = () => setMode('menu');
+    const handleClose = () => {
+        setMode('closed');
+        // Reset specific states if needed
+    };
 
-    const handleOpen = () => setIsOpen(true);
-    const handleClose = () => setIsOpen(false);
+    const openTransaction = () => {
+        setMode('transaction');
+        setTimeout(() => amountRef.current?.focus(), 100);
+    };
 
-    const handleSubmit = async () => {
-        let finalTargetId = targetId;
-        const submitType = type;
-        const currentAmount = amount;
-        const currentDescription = description;
-        const currentCategorySearch = categorySearch;
-        const currentNewCatType = newCatType;
-        const currentNewCatBudget = newCatBudget;
-        const currentIsPinned = isPinned;
-        const currentNewCatFrequency = newCatFrequency;
-        const currentPaymentSource = paymentSource;
-        const currentSelectedDebtId = selectedDebtId;
+    const openCategory = () => {
+        setInitialCatName("");
+        setMode('category');
+    };
 
-        // --- INSTANT UI: Close modal and reset immediately ---
+    const openCategoryWithSearch = () => {
+        setInitialCatName(categorySearch);
+        setMode('category');
+    };
+
+    const handleSubmitTx = async () => {
+        const finalDebtId = (type === 'expense' && paymentSource === 'debt') ? selectedDebtId : undefined;
+        onAdd(type, amount, targetId, description, finalDebtId);
+
+        // Reset & Close
         setAmount("");
         setDescription("");
         setTargetId("");
         setCategorySearch("");
-        setNewCatType('wants');
-        setNewCatBudget("");
-        setIsPinned(false);
-        setNewCatFrequency(1);
-        setIsTypeConfirmed(false);
         setType('expense');
         setPaymentSource('cash');
         setSelectedDebtId("");
-        setIsOpen(false);
-
-        // --- BACKGROUND: Run all server operations async ---
-        (async () => {
-            // --- 1. Auto-create CATEGORY ---
-            if (submitType === 'expense' && !finalTargetId && currentCategorySearch.trim()) {
-                const existing = categories.find(c => c.name.toLowerCase() === currentCategorySearch.trim().toLowerCase());
-                if (existing) {
-                    finalTargetId = existing.id;
-                } else {
-                    const newCatId = crypto.randomUUID();
-                    const newCatName = currentCategorySearch.trim();
-                    const isFixed = currentNewCatType === 'fixed';
-                    const budgetLimit = currentNewCatBudget ? parseFloat(currentNewCatBudget) : 0;
-
-                    try {
-                        await db.categories.add({
-                            id: newCatId,
-                            name: newCatName,
-                            budget_limit: budgetLimit / currentNewCatFrequency,
-                            type: isFixed ? 'fixed' : 'variable',
-                            commitment_type: isFixed ? 'fixed' : (currentNewCatType === 'needs' ? 'variable_fixed' : null),
-                            is_commitment: isFixed || currentNewCatType === 'needs',
-                            is_pinned: currentIsPinned,
-                            frequency_months: currentNewCatFrequency,
-                            user_id: 'unknown',
-                            sync_status: 'created'
-                        });
-
-                        let serverCommitmentType: 'fixed' | 'variable_fixed' | null = null;
-                        if (currentNewCatType === 'fixed') serverCommitmentType = 'fixed';
-                        if (currentNewCatType === 'needs') serverCommitmentType = 'variable_fixed';
-
-                        // Sync to server and mark as synced to prevent duplicate
-                        addCategory(newCatName, serverCommitmentType, budgetLimit / currentNewCatFrequency, currentIsPinned, currentNewCatFrequency)
-                            .then(() => db.categories.update(newCatId, { sync_status: 'synced' }))
-                            .catch(console.error);
-                        finalTargetId = newCatId;
-                    } catch (e) {
-                        console.error("Failed to auto-create category", e);
-                        return;
-                    }
-                }
-            }
-
-            // if (!finalTargetId && submitType !== 'income') return; // Allow uncategorized
-
-            // Pass debtId if payment source is debt
-            const finalDebtId = (submitType === 'expense' && currentPaymentSource === 'debt') ? currentSelectedDebtId : undefined;
-
-            onAdd(submitType, currentAmount, finalTargetId, currentDescription, finalDebtId);
-
-            // Background refresh - don't block
-            router.refresh();
-        })();
+        setMode('closed');
+        router.refresh(); // Background refresh
     };
 
-    // Filter categories
+    // Filter categories for Transaction Modal
     const filteredCategories = categories.filter(c =>
         c.name.toLowerCase().includes(categorySearch.toLowerCase())
     );
-    const isCreatingNewCat = categorySearch && !targetId && filteredCategories.length === 0;
-
-    const handleTypeSelect = (t: CatType) => {
-        setNewCatType(t);
-        setIsTypeConfirmed(true);
-        setTimeout(() => { if (amountRef.current) amountRef.current.focus(); }, 50);
-    };
+    const showCreateOption = categorySearch && !targetId && filteredCategories.length === 0;
 
     const handleTabChange = (t: TxType) => {
         setType(t);
         setTargetId("");
         setCategorySearch("");
-        setIsTypeConfirmed(false);
-        // Reset payment source on tab change
         setPaymentSource('cash');
         setSelectedDebtId("");
     };
 
     return (
         <>
-            <div className="fixed bottom-6 right-6 z-40">
-                <button onClick={handleOpen} className="bg-stone-900 text-white shadow-xl px-6 py-4 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-black transition-transform active:scale-95">
-                    <Plus size={20} /> Add Transaction
-                </button>
+            {/* --- FAB / MENU TRIGGER --- */}
+            <div className="fixed bottom-6 right-6 z-[60]">
+                {mode === 'closed' ? (
+                    <button onClick={handleOpenMenu} className="bg-stone-900 text-white shadow-xl px-5 py-4 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-black transition-transform active:scale-95">
+                        <Plus size={24} /> <span className="sr-only">Add</span>
+                    </button>
+                ) : (
+                    <button onClick={handleClose} className="bg-stone-200 text-stone-600 shadow-xl p-4 rounded-full hover:bg-stone-300 transition-transform active:scale-95">
+                        <X size={24} />
+                    </button>
+                )}
             </div>
 
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
+            {/* --- MENU OVERLAY --- */}
+            {mode === 'menu' && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={handleClose}>
+                    <div className="absolute bottom-24 right-6 flex flex-col gap-4 items-end" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300 delay-75">
+                            <span className="text-white font-bold text-sm shadow-sm bg-black/50 px-2 py-1 rounded">New Category</span>
+                            <button onClick={openCategory} className="bg-white text-stone-900 shadow-xl p-4 rounded-full hover:bg-stone-50 active:scale-95 transition-transform">
+                                <Tag size={24} />
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
+                            <span className="text-white font-bold text-sm shadow-sm bg-black/50 px-2 py-1 rounded">New Transaction</span>
+                            <button onClick={openTransaction} className="bg-stone-900 text-white shadow-xl p-4 rounded-full hover:bg-black active:scale-95 transition-transform">
+                                <Banknote size={24} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
+            {/* --- TRANSACTION MODAL --- */}
+            {mode === 'transaction' && (
+                <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-t-2xl p-6 pb-24 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center">
                             <h2 className="text-lg font-bold text-stone-900">New Transaction</h2>
                             <button onClick={handleClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500"><X size={20} /></button>
                         </div>
 
+                        {/* Tabs */}
                         <div className="flex border-b border-stone-200">
                             {[{ id: 'expense', label: 'Expense' }, { id: 'income', label: 'Income' }].map(t => (
                                 <button key={t.id} onClick={() => handleTabChange(t.id as TxType)} className={clsx("flex-1 pb-3 text-sm font-bold uppercase tracking-wider transition-colors border-b-2", type === t.id ? "border-stone-900 text-stone-900" : "border-transparent text-stone-400 hover:text-stone-600")}>{t.label}</button>
@@ -198,8 +151,7 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                         </div>
 
                         <div className="space-y-4">
-
-                            {/* Amount - FIRST (User Request: prioritize amount) */}
+                            {/* Amount */}
                             <div className="space-y-2">
                                 <label className="text-xs uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
                                     Amount (AED)
@@ -209,175 +161,104 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
                                     ref={amountRef}
                                     type="text"
                                     inputMode="decimal"
-                                    placeholder="0.00 or 50+20"
+                                    placeholder="0.00"
                                     value={amount}
                                     onChange={e => setAmount(e.target.value)}
                                     onBlur={() => {
                                         if (/[+\-*/]/.test(amount)) {
                                             const result = evaluateMathExpression(amount);
-                                            if (result !== null) {
-                                                setAmount(result.toFixed(2));
-                                            }
+                                            if (result !== null) setAmount(result.toFixed(2));
                                         }
                                     }}
-                                    autoFocus
                                     className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-2xl font-mono font-bold outline-none focus:border-stone-900"
                                 />
-                                {/* Math Operator Quick Buttons */}
+                                {/* Math Buttons */}
                                 <div className="flex gap-2 pt-1">
                                     {['+', '-', '×', '÷'].map(op => (
-                                        <button
-                                            key={op}
-                                            type="button"
-                                            onClick={() => {
-                                                const symbol = op === '×' ? '*' : op === '÷' ? '/' : op;
-                                                setAmount(prev => prev + symbol);
-                                                amountRef.current?.focus();
-                                            }}
-                                            className="flex-1 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-lg transition-colors"
-                                        >
-                                            {op}
-                                        </button>
+                                        <button key={op} type="button" onClick={() => { const s = op === '×' ? '*' : op === '÷' ? '/' : op; setAmount(p => p + s); amountRef.current?.focus(); }} className="flex-1 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-lg transition-colors">{op}</button>
                                     ))}
-                                    {/* Equals button to compute */}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const result = evaluateMathExpression(amount);
-                                            if (result !== null) {
-                                                setAmount(result.toFixed(2));
-                                            }
-                                        }}
-                                        className="flex-1 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-bold text-lg transition-colors"
-                                    >
-                                        =
-                                    </button>
+                                    <button type="button" onClick={() => { const res = evaluateMathExpression(amount); if (res !== null) setAmount(res.toFixed(2)); }} className="flex-1 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-bold text-lg transition-colors">=</button>
                                 </div>
                             </div>
 
-                            {/* --- EXPENSE: Category & Payment Source --- */}
+                            {/* Expense Category & Source */}
                             {type === 'expense' && (
                                 <div className="space-y-4">
-                                    {/* Category Selection */}
                                     <div className="space-y-2">
                                         <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Category</label>
                                         <div className="relative">
-                                            <input type="text" value={categorySearch} onChange={e => { setCategorySearch(e.target.value); setTargetId(""); setIsTypeConfirmed(false); }} placeholder="Select category (optional)..." className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                            <input type="text" value={categorySearch} onChange={e => { setCategorySearch(e.target.value); setTargetId(""); }} placeholder="Select category..." className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
 
                                             {categorySearch && !targetId && filteredCategories.length > 0 && (
                                                 <div className="absolute top-full left-0 right-0 bg-white border shadow-xl z-50 max-h-40 overflow-y-auto rounded-b-xl">
-                                                    {filteredCategories.map(c => (<div key={c.id} onClick={() => { setCategorySearch(c.name); setTargetId(c.id); setIsTypeConfirmed(false); }} className="p-3 hover:bg-stone-100 cursor-pointer font-bold text-stone-700 border-b border-stone-100 last:border-0">{c.name}</div>))}
+                                                    {filteredCategories.map(c => (<div key={c.id} onClick={() => { setCategorySearch(c.name); setTargetId(c.id); }} className="p-3 hover:bg-stone-100 cursor-pointer font-bold text-stone-700 border-b border-stone-100 last:border-0">{c.name}</div>))}
                                                 </div>
                                             )}
 
-                                            {isCreatingNewCat && !isTypeConfirmed && (
-                                                <div className="absolute top-full left-0 right-0 bg-stone-50 border-b border-x border-stone-200 p-4 z-50 rounded-b-xl shadow-lg space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                                                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-stone-400 mb-1"><Plus size={12} /> Create "{categorySearch}" as:</div>
-                                                    <div className="grid grid-cols-1 gap-2">
-                                                        <button onClick={() => handleTypeSelect('fixed')} className="flex items-center gap-3 p-3 rounded-lg border bg-white border-stone-200 text-stone-500 hover:border-blue-500 hover:bg-blue-50 transition-all active:scale-95 text-left"><div className="p-2 rounded-full bg-stone-100 text-stone-400"><Landmark size={20} /></div><div><div className="font-bold text-sm text-stone-700">Fixed</div><div className="text-[10px] opacity-70 leading-tight">Rent, Utilities</div></div></button>
-                                                        <button onClick={() => handleTypeSelect('needs')} className="flex items-center gap-3 p-3 rounded-lg border bg-white border-stone-200 text-stone-500 hover:border-purple-500 hover:bg-purple-50 transition-all active:scale-95 text-left"><div className="p-2 rounded-full bg-stone-100 text-stone-400"><ShoppingBag size={20} /></div><div><div className="font-bold text-sm text-stone-700">Needs</div><div className="text-[10px] opacity-70 leading-tight">Groceries</div></div></button>
-                                                        <button onClick={() => handleTypeSelect('wants')} className="flex items-center gap-3 p-3 rounded-lg border bg-white border-stone-200 text-stone-500 hover:border-emerald-500 hover:bg-emerald-50 transition-all active:scale-95 text-left"><div className="p-2 rounded-full bg-stone-100 text-stone-400"><ShoppingBag size={20} /></div><div><div className="font-bold text-sm text-stone-700">Wants</div><div className="text-[10px] opacity-70 leading-tight">Fun, Shopping</div></div></button>
-                                                    </div>
+                                            {/* CREATE CATEGORY BUTTON */}
+                                            {showCreateOption && (
+                                                <div className="absolute top-full left-0 right-0 p-2 z-50">
+                                                    <button
+                                                        onClick={openCategoryWithSearch}
+                                                        className="w-full bg-stone-900 text-white p-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-black transition-transform active:scale-95"
+                                                    >
+                                                        <Plus size={16} /> Create Category "{categorySearch}"
+                                                    </button>
                                                 </div>
                                             )}
                                         </div>
-
-                                        {isCreatingNewCat && isTypeConfirmed && (
-                                            <div className="space-y-3 mt-2 animate-in slide-in-from-top-2">
-                                                <div className="bg-white border border-stone-200 p-3 rounded-xl shadow-sm flex justify-between items-center">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={clsx("p-1.5 rounded-full", newCatType === 'fixed' ? "bg-blue-100 text-blue-700" : newCatType === 'needs' ? "bg-purple-100 text-purple-700" : "bg-emerald-100 text-emerald-700")}>{newCatType === 'fixed' ? <Landmark size={14} /> : <ShoppingBag size={14} />}</div>
-                                                        <div className="text-sm font-bold text-stone-700 capitalize">{newCatType}</div>
-                                                    </div>
-                                                    <div className="flex items-center gap-4">
-                                                        <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsPinned(!isPinned); }} className="flex items-center gap-2 cursor-pointer select-none group">
-                                                            <div className={clsx("w-4 h-4 rounded border flex items-center justify-center transition-colors", isPinned ? "bg-stone-900 border-stone-900" : "bg-white border-stone-300 group-hover:border-stone-400")}>{isPinned && <Check size={10} className="text-white" />}</div>
-                                                            <span className="text-xs font-bold text-stone-500 group-hover:text-stone-700">Pin</span>
-                                                        </div>
-                                                        <button onClick={() => setIsTypeConfirmed(false)} className="text-xs font-bold text-blue-500 hover:text-blue-700">Change</button>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-4">
-                                                    {/* Only show frequency for Fixed/Needs */}
-                                                    {(newCatType === 'fixed' || newCatType === 'needs') && (
-                                                        <div className="space-y-2">
-                                                            <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
-                                                            <select
-                                                                value={newCatFrequency}
-                                                                onChange={e => setNewCatFrequency(Number(e.target.value))}
-                                                                className="w-full p-3 bg-stone-50 border-b-2 border-stone-200 text-sm font-bold outline-none focus:border-stone-900 rounded-lg"
-                                                            >
-                                                                <option value={1}>Monthly</option>
-                                                                <option value={2}>Every 2 Months</option>
-                                                                <option value={3}>Every 3 Months</option>
-                                                                <option value={6}>Every 6 Months</option>
-                                                                <option value={12}>Yearly</option>
-                                                            </select>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="space-y-2">
-                                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                                            {newCatFrequency > 1 ? 'Total Bill Amount (AED)' : (newCatType === 'fixed' ? 'Fixed Amount (AED)' : 'Monthly Limit (AED)')}
-                                                        </label>
-                                                        <input type="number" placeholder="0.00" inputMode="decimal" step="0.01" value={newCatBudget} onChange={e => setNewCatBudget(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
 
-                                    {/* Payment Method Selector */}
+                                    {/* Payment Source */}
                                     <div className="space-y-2">
                                         <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Source</label>
                                         <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setPaymentSource('cash')}
-                                                className={clsx("flex-1 py-2 rounded-lg font-bold text-sm border transition-all active:scale-95", paymentSource === 'cash' ? "bg-stone-900 text-white border-stone-900" : "bg-white text-stone-500 border-stone-200 hover:border-stone-300")}
-                                            >
-                                                Cash / Bank
-                                            </button>
-                                            <button
-                                                onClick={() => setPaymentSource('debt')}
-                                                className={clsx("flex-1 py-2 rounded-lg font-bold text-sm border transition-all active:scale-95", paymentSource === 'debt' ? "bg-red-600 text-white border-red-600" : "bg-white text-stone-500 border-stone-200 hover:border-stone-300")}
-                                            >
-                                                Credit Card / Debt
-                                            </button>
+                                            <button onClick={() => setPaymentSource('cash')} className={clsx("flex-1 py-2 rounded-lg font-bold text-sm border transition-all active:scale-95", paymentSource === 'cash' ? "bg-stone-900 text-white border-stone-900" : "bg-white text-stone-500 border-stone-200")}>Cash / Bank</button>
+                                            <button onClick={() => setPaymentSource('debt')} className={clsx("flex-1 py-2 rounded-lg font-bold text-sm border transition-all active:scale-95", paymentSource === 'debt' ? "bg-red-600 text-white border-red-600" : "bg-white text-stone-500 border-stone-200")}>Credit Card</button>
                                         </div>
-
-                                        {/* Debt Account Selector */}
                                         {paymentSource === 'debt' && (
-                                            <div className="animate-in slide-in-from-top-2">
-                                                <select
-                                                    value={selectedDebtId}
-                                                    onChange={e => setSelectedDebtId(e.target.value)}
-                                                    className="w-full p-3 bg-red-50 border-b-2 border-red-200 text-red-900 font-bold outline-none focus:border-red-600 rounded-lg"
-                                                >
-                                                    <option value="">Select Debt Account...</option>
-                                                    {debts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                                </select>
-                                                {debts.length === 0 && (
-                                                    <div className="text-[10px] text-red-500 mt-1 font-bold">No debt accounts found. Create one in the Debt tab first.</div>
-                                                )}
-                                            </div>
+                                            <select value={selectedDebtId} onChange={e => setSelectedDebtId(e.target.value)} className="w-full p-3 bg-red-50 border-b-2 border-red-200 text-red-900 font-bold outline-none focus:border-red-600 rounded-lg">
+                                                <option value="">Select Card...</option>
+                                                {debts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                            </select>
                                         )}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Detailed Description */}
-
+                            {/* Description */}
                             <div className="space-y-2">
                                 <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Description</label>
-                                <input type="text" maxLength={255} placeholder="e.g. Monthly Pay" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
+                                <input type="text" maxLength={255} placeholder="e.g. Lunch" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900" />
                             </div>
                         </div>
 
-                        <button disabled={isSubmitting || !amount} onClick={handleSubmit} className={clsx("w-full py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2", "bg-stone-900 text-white")}>
+                        <button disabled={isSubmitting || !amount} onClick={handleSubmitTx} className={clsx("w-full py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2", "bg-stone-900 text-white")}>
                             {isSubmitting ? <><Spinner className="mr-1" /> Saving...</> : "Save Transaction"}
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* --- CATEGORY MODAL (SHEET) --- */}
+            {mode === 'category' && (
+                <CategorySheet
+                    initialName={initialCatName}
+                    allCategories={categories as any}
+                    onClose={handleClose}
+                    onSave={() => {
+                        // After save, user might want to go back to transaction?
+                        // For now, let's close everything or maybe go back to Transaction if there was an amount?
+                        // User request: "separate so that they are separate".
+                        // So let's just close.
+                        // However, if we came from Transaction flow (Create Option), maybe we want to reopen Transaction? 
+                        // But that's complicated state management. Let's stick to simple Close.
+                        handleClose();
+                        router.refresh();
+                    }}
+                // Note: CategorySheet usually renders inside a Portal at root. 
+                // Since MobileAddBar behaves like a root overlay, this is fine.
+                />
             )}
         </>
     )

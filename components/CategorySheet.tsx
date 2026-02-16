@@ -30,6 +30,7 @@ interface CategorySheetProps {
     onClose: () => void;
     onSave: (c: Category) => void;
     onDelete?: (id: string) => void;
+    initialName?: string;
 }
 
 export function CategorySheet({
@@ -37,13 +38,14 @@ export function CategorySheet({
     allCategories,
     onClose,
     onSave,
-    onDelete
+    onDelete,
+    initialName = ""
 }: CategorySheetProps) {
     const isEditing = !!category;
     const [activeTab, setActiveTab] = useState<'details' | 'transfer'>('details');
 
     // -- Details State --
-    const [name, setName] = useState(category?.name || "");
+    const [name, setName] = useState(category?.name || initialName);
     const initialType = category?.commitment_type || (category?.is_commitment ? 'fixed' : null);
     const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
 
@@ -110,40 +112,46 @@ export function CategorySheet({
         setIsSubmitting(true);
 
         const limit = parseFloat(budgetLimit) || 0;
-        const startVal = frequency > 1 ? `${frequencyStart}-01` : undefined;
+        // Updated formatting: YYYY-MM-DD for standard DB format or YYYY-MM
+        const startVal = frequency > 1 && frequencyStart ? `${frequencyStart}-01` : undefined;
         const finalLimit = limit / frequency; // Monthly limit stored in DB
 
         try {
             if (isEditing && category) {
                 // Update
-                await updateCategory(category.id, name, commitmentType, finalLimit, isPinned, frequency, startVal);
-                onSave({
-                    ...category,
+                const updatedData = {
                     name,
                     commitment_type: commitmentType,
-                    is_commitment: !!commitmentType,
                     budget_limit: finalLimit,
                     is_pinned: isPinned,
                     frequency_months: frequency,
                     frequency_start: startVal
+                };
+
+                await updateCategory(category.id, name, commitmentType, finalLimit, isPinned, frequency, startVal);
+
+                // FORCE LOCAL UPDATE
+                await db.categories.update(category.id, {
+                    ...updatedData,
+                    is_commitment: !!commitmentType
+                });
+
+                onSave({
+                    id: category.id,
+                    ...updatedData,
+                    is_commitment: !!commitmentType,
+                    balance: category.balance
                 });
                 toast.success("Category updated");
             } else {
                 // Create
-                const newId = crypto.randomUUID();
+                // Server generates ID, so we need to reload or re-fetch to get it for Dexie.
+                // Or we can manually insert into DB if we knew the ID.
                 await addCategory(name, commitmentType, finalLimit, isPinned, frequency, startVal);
-                onSave({
-                    id: newId,
-                    name,
-                    commitment_type: commitmentType,
-                    is_commitment: !!commitmentType,
-                    budget_limit: finalLimit,
-                    is_pinned: isPinned,
-                    frequency_months: frequency,
-                    frequency_start: startVal,
-                    balance: 0
-                });
+
                 toast.success("Category created");
+                // Trigger reload to get fresh data from server into Dexie sync
+                window.location.reload();
             }
             onClose();
         } catch (error) {

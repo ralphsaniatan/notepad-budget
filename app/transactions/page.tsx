@@ -21,7 +21,7 @@ export default async function TransactionsPage() {
             </header>
 
             {/* Pinned Budgets (Envelopes) */}
-            <TrackedBudgetList />
+            <TrackedBudgetList currentDate={new Date()} />
 
             {/* Transaction List */}
             <section className="space-y-4">
