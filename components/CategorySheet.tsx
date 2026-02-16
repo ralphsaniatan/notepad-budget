@@ -80,7 +80,6 @@ export function CategorySheet({
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     });
     const [isPinned, setIsPinned] = useState(category?.is_pinned || false);
-    const [currentBalance, setCurrentBalance] = useState(category?.balance?.toString() || "0");
 
     // -- Transfer State --
     const [transferAmount, setTransferAmount] = useState("");
@@ -111,16 +110,12 @@ export function CategorySheet({
         setIsSubmitting(true);
         try {
             const limit = parseFloat(budgetLimit) || 0;
-            const balance = parseFloat(currentBalance) || 0;
             const finalLimit = frequency > 1 ? limit / frequency : limit; // Store monthly limit
-            // Note: If frequency > 1, the user entered TOTAL. We store MONTHLY.
-            // Example: 7300 every 2 months. User enters 7300. We store 3650.
-
             const startVal = frequency > 1 ? frequencyStart : undefined;
 
             if (isEditing && category) {
                 // UPDATE
-                await updateCategory(category.id, name, commitmentType, finalLimit, isPinned, frequency, startVal, balance);
+                await updateCategory(category.id, name, commitmentType, finalLimit, isPinned, frequency, startVal);
 
                 // Optimistic Update
                 await db.categories.update(category.id, {
@@ -131,7 +126,6 @@ export function CategorySheet({
                     is_pinned: isPinned,
                     frequency_months: frequency,
                     frequency_start: startVal,
-                    balance: balance, // Update balance directly
                     sync_status: 'updated'
                 });
 
@@ -145,7 +139,7 @@ export function CategorySheet({
                     is_pinned: isPinned,
                     frequency_months: frequency,
                     frequency_start: startVal,
-                    balance: balance
+                    balance: category.balance
                 });
             } else {
                 // CREATE
@@ -352,10 +346,10 @@ export function CategorySheet({
                         {(commitmentType === 'fixed' || commitmentType === 'variable_fixed') && (
                             <div className="space-y-4 animate-in slide-in-from-top-1 fade-in duration-200 pt-2 border-t border-stone-100">
                                 <div className="space-y-2">
-                                    <div className="flex justify-between">
+                                    <div className="flex flex-wrap justify-between items-center gap-2">
                                         <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
                                         {frequency > 1 && (
-                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full whitespace-nowrap">
                                                 Monthly: {currency((parseFloat(budgetLimit) || 0) / frequency)}
                                             </span>
                                         )}
@@ -387,28 +381,7 @@ export function CategorySheet({
                             </div>
                         )}
 
-                        {/* Current Balance Input (Only for Editing or Committed) */}
-                        {(isEditing || (commitmentType && commitmentType !== 'fixed')) && (
-                            <div className="space-y-2 mt-4 pt-4 border-t border-stone-100">
-                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
-                                    Current Balance (Rollover)
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-4 text-stone-400 font-bold">AED</span>
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={currentBalance}
-                                        onChange={e => setCurrentBalance(e.target.value)}
-                                        placeholder="0.00"
-                                        className="w-full p-4 pl-14 bg-stone-50 border-b-2 border-stone-200 text-xl font-bold font-mono outline-none focus:border-stone-900 transition-colors"
-                                    />
-                                </div>
-                                <p className="text-[10px] text-stone-400">
-                                    Adjust this manually to fix historical discrepancies or set initial savings.
-                                </p>
-                            </div>
-                        )}
+
 
                         <div className="flex gap-4 pt-4">
                             {isEditing && onDelete && (

@@ -46,9 +46,12 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
         const balance = cat.balance || 0;
         const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonthStr);
 
-        const effectiveLimit = limit;
+        // Variable Limit: full bill in payment months, monthly allocation otherwise
+        const effectiveLimit = freq > 1
+            ? (paymentMonth ? limit * freq : limit)
+            : limit;
 
-        // Fix: Always include balance (carryover + transfers) in available funds
+        // Total available includes balance (rollover from previous months)
         const totalAvailable = effectiveLimit + balance;
         const remaining = totalAvailable - spent;
         const percent = totalAvailable > 0 ? (spent / totalAvailable) * 100 : 0;

@@ -125,7 +125,6 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0');
 
         let totalCommitments = 0;
-        let reservedBalance = 0;
 
         committedCategories?.forEach(cat => {
             const limit = safeNum(cat.budget_limit);
@@ -133,22 +132,17 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             const freq = safeNum(cat.frequency_months) || 1;
             const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
 
-            if (freq > 1) {
-                if (paymentMonth) {
-                    // Payment month: full bill is due. Commitment = limit * freq.
-                    // Balance is being used to pay, not reserved.
-                    totalCommitments += limit * freq;
-                } else {
-                    // Accumulation month: set aside per-month allocation.
-                    totalCommitments += limit;
-                    // Balance is reserved (being saved for payment month).
-                    reservedBalance += balance;
-                }
-            } else {
-                totalCommitments += limit;
-            }
+            // Variable Limit Model:
+            // Payment month: full bill is due (limit * freq).
+            // Off month: only the monthly allocation (limit).
+            const effectiveLimit = freq > 1
+                ? (paymentMonth ? limit * freq : limit)
+                : limit;
+
+            totalCommitments += effectiveLimit;
 
             // Calculate Overspend
+            // In payment months, the balance helps cover the bill.
             const available = freq > 1
                 ? (paymentMonth ? (limit * freq + balance) : limit)
                 : limit;
@@ -158,9 +152,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             overspend += excess;
         });
 
-        // Safe To Spend = (Income + Rollover) - Total Commitments (Envelopes) - Variable Spent - Overspend Penalty - Reserved Balances
-        // Notice: 'Overspend' is the amount EXCEEDING the (limit + balance).
-        const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend - reservedBalance;
+        // Safe To Spend = (Income + Rollover) - Total Commitments - Variable Spent - Overspend
+        const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
 
         // 4. Get Debts
         const { data: debts } = await supabase
