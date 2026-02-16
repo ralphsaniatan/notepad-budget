@@ -143,7 +143,12 @@ export function CategorySheet({
                 });
             } else {
                 // CREATE
-                await addCategory(name, commitmentType, finalLimit, isPinned, frequency, startVal);
+                const result = await addCategory(name, commitmentType, finalLimit, isPinned, frequency, startVal);
+                if (result && !result.success) {
+                    toast.error(result.error || "Failed to create category");
+                    setIsSubmitting(false);
+                    return;
+                }
 
                 toast.success("Category created");
                 // Trigger reload to get fresh data from server into Dexie sync
@@ -221,7 +226,7 @@ export function CategorySheet({
 
     return createPortal(
         <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto overflow-x-hidden">
                 <div className="flex justify-between items-center">
                     <div>
                         <h2 className="text-lg font-bold text-stone-900">{isEditing ? "Edit Category" : "New Category"}</h2>
