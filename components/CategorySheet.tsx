@@ -130,7 +130,7 @@ export function CategorySheet({
             } else {
                 // Create
                 const newId = crypto.randomUUID();
-                await addCategory(name, commitmentType, finalLimit, isPinned, frequency, startVal);
+                await addCategory(name, commitmentType, finalLimit, isPinned, frequency, startVal, newId);
                 onSave({
                     id: newId,
                     name,

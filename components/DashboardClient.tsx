@@ -179,7 +179,8 @@ export function DashboardClient({ initialData }: DashboardData) {
             }
 
             // 2. Trigger Server Action (Hybrid Sync)
-            const result = await addTransaction(amount, description || "", type, targetId, type === 'debt_payment' ? targetId : debtId);
+            // Pass txId to ensure server uses the same UUID
+            const result = await addTransaction(amount, description || "", type, targetId, type === 'debt_payment' ? targetId : debtId, undefined, txId);
 
             // 3. CRITICAL: Mark as synced to prevent SyncManager creating duplicate
             if (result?.success) {

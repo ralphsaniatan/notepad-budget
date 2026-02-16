@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getAllUserData, addTransaction, addCategory, updateCategory, addDebt, updateTransaction, updateDebt } from "@/app/actions";
+import { getAllUserData, addTransaction, addCategory, updateCategory, addDebt, updateTransaction, updateDebt, bulkCreateTransactions, bulkCreateCategories, bulkCreateDebts } from "@/app/actions";
 import { db } from "@/lib/db";
 import { Cloud, CloudOff, RefreshCw, Check, Download, Upload, AlertCircle } from "lucide-react";
 
@@ -52,71 +52,45 @@ export function SyncManager() {
 
             await db.transaction('rw', db.transactions, db.categories, db.debts, db.savings_goals, async () => {
                 // Get IDs of pending local items (don't overwrite or delete these)
-                const pendingTxIds = (await db.transactions.where('sync_status').anyOf(['created', 'updated']).toArray()).map(t => t.id);
-                const pendingCatIds = (await db.categories.where('sync_status').anyOf(['created', 'updated']).toArray()).map(c => c.id);
-                const pendingDebtIds = (await db.debts.where('sync_status').anyOf(['created', 'updated']).toArray()).map(d => d.id);
-                const pendingSavingsIds = (await db.savings_goals.where('sync_status').anyOf(['created', 'updated']).toArray()).map(s => s.id);
+                const pendingTxIds = new Set((await db.transactions.where('sync_status').anyOf(['created', 'updated']).toArray()).map(t => t.id));
+                const pendingCatIds = new Set((await db.categories.where('sync_status').anyOf(['created', 'updated']).toArray()).map(c => c.id));
+                const pendingDebtIds = new Set((await db.debts.where('sync_status').anyOf(['created', 'updated']).toArray()).map(d => d.id));
+                const pendingSavingsIds = new Set((await db.savings_goals.where('sync_status').anyOf(['created', 'updated']).toArray()).map(s => s.id));
 
-                // Get server IDs for comparison
                 const serverTxIds = new Set((res.data.transactions || []).map((t: any) => t.id));
                 const serverCatIds = new Set((res.data.categories || []).map((c: any) => c.id));
                 const serverDebtIds = new Set((res.data.debts || []).map((d: any) => d.id));
                 const serverSavingsIds = new Set((res.data.savings_goals || []).map((s: any) => s.id));
 
-                // MERGE: For each server item, update local if not pending
-                for (const tx of res.data.transactions || []) {
-                    if (!pendingTxIds.includes(tx.id)) {
-                        await db.transactions.put({ ...tx, sync_status: 'synced' });
-                    }
-                }
-                for (const cat of res.data.categories || []) {
-                    if (!pendingCatIds.includes(cat.id)) {
-                        await db.categories.put({ ...cat, sync_status: 'synced' });
-                    }
-                }
-                for (const debt of res.data.debts || []) {
-                    if (!pendingDebtIds.includes(debt.id)) {
-                        await db.debts.put({ ...debt, sync_status: 'synced' });
-                    }
-                }
-                for (const goal of res.data.savings_goals || []) {
-                    if (!pendingSavingsIds.includes(goal.id)) {
-                        await db.savings_goals.put({ ...goal, sync_status: 'synced' });
-                    }
-                }
+                // MERGE: Bulk Put
+                const txsToPut = (res.data.transactions || []).filter((tx: any) => !pendingTxIds.has(tx.id)).map((tx: any) => ({ ...tx, sync_status: 'synced' }));
+                if (txsToPut.length) await db.transactions.bulkPut(txsToPut);
 
-                // DELETE: Remove local synced items that no longer exist on server
+                const catsToPut = (res.data.categories || []).filter((c: any) => !pendingCatIds.has(c.id)).map((c: any) => ({ ...c, sync_status: 'synced' }));
+                if (catsToPut.length) await db.categories.bulkPut(catsToPut);
+
+                const debtsToPut = (res.data.debts || []).filter((d: any) => !pendingDebtIds.has(d.id)).map((d: any) => ({ ...d, sync_status: 'synced' }));
+                if (debtsToPut.length) await db.debts.bulkPut(debtsToPut);
+
+                const savingsToPut = (res.data.savings_goals || []).filter((s: any) => !pendingSavingsIds.has(s.id)).map((s: any) => ({ ...s, sync_status: 'synced' }));
+                if (savingsToPut.length) await db.savings_goals.bulkPut(savingsToPut);
+
+                // DELETE: Bulk Delete
                 const localSyncedTxs = await db.transactions.where('sync_status').equals('synced').toArray();
-                for (const tx of localSyncedTxs) {
-                    if (!serverTxIds.has(tx.id)) {
-                        await db.transactions.delete(tx.id);
-                        console.log("SyncManager: Removed deleted transaction", tx.id);
-                    }
-                }
+                const txIdsToDelete = localSyncedTxs.filter(tx => !serverTxIds.has(tx.id)).map(tx => tx.id);
+                if (txIdsToDelete.length) await db.transactions.bulkDelete(txIdsToDelete);
 
                 const localSyncedCats = await db.categories.where('sync_status').equals('synced').toArray();
-                for (const cat of localSyncedCats) {
-                    if (!serverCatIds.has(cat.id)) {
-                        await db.categories.delete(cat.id);
-                        console.log("SyncManager: Removed deleted category", cat.id);
-                    }
-                }
+                const catIdsToDelete = localSyncedCats.filter(c => !serverCatIds.has(c.id)).map(c => c.id);
+                if (catIdsToDelete.length) await db.categories.bulkDelete(catIdsToDelete);
 
                 const localSyncedDebts = await db.debts.where('sync_status').equals('synced').toArray();
-                for (const debt of localSyncedDebts) {
-                    if (!serverDebtIds.has(debt.id)) {
-                        await db.debts.delete(debt.id);
-                        console.log("SyncManager: Removed deleted debt", debt.id);
-                    }
-                }
+                const debtIdsToDelete = localSyncedDebts.filter(d => !serverDebtIds.has(d.id)).map(d => d.id);
+                if (debtIdsToDelete.length) await db.debts.bulkDelete(debtIdsToDelete);
 
                 const localSyncedSavings = await db.savings_goals.where('sync_status').equals('synced').toArray();
-                for (const goal of localSyncedSavings) {
-                    if (!serverSavingsIds.has(goal.id)) {
-                        await db.savings_goals.delete(goal.id);
-                        console.log("SyncManager: Removed deleted savings goal", goal.id);
-                    }
-                }
+                const savingIdsToDelete = localSyncedSavings.filter(s => !serverSavingsIds.has(s.id)).map(s => s.id);
+                if (savingIdsToDelete.length) await db.savings_goals.bulkDelete(savingIdsToDelete);
             });
 
             setLastPull(new Date());
@@ -191,55 +165,54 @@ export function SyncManager() {
         let failed = 0;
 
         try {
-            // 1. Sync Transactions
+            // 1. Bulk Transactions (Create)
             const pendingTxs = await db.transactions.where('sync_status').equals('created').toArray();
-            for (const tx of pendingTxs) {
-                try {
-                    // Pass the original transaction date to preserve correct dating
-                    const res = await addTransaction(tx.amount, tx.description, tx.type, tx.category_id, tx.debt_id, tx.date);
-                    if (res.success && res.transactionId) {
-                        // Delete the local temp record and add with server ID
-                        await db.transactions.delete(tx.id);
-                        await db.transactions.put({
-                            ...tx,
-                            id: res.transactionId, // Use server's ID
-                            sync_status: 'synced'
-                        });
-                        synced++;
-                    } else if (res.success) {
-                        // Fallback if ID not returned
-                        await db.transactions.update(tx.id, { sync_status: 'synced' });
-                        synced++;
-                    } else {
-                        failed++;
-                        console.error("SyncManager: Transaction sync returned error", tx.id, res.error);
-                    }
-                } catch (e) {
-                    failed++;
-                    console.error("SyncManager: Failed to sync transaction", tx.id, e);
+            if (pendingTxs.length > 0) {
+                const res = await bulkCreateTransactions(pendingTxs.map(tx => ({
+                    id: tx.id,
+                    amount: tx.amount,
+                    description: tx.description,
+                    type: tx.type,
+                    date: tx.date,
+                    category_id: tx.category_id,
+                    debt_id: tx.debt_id
+                })));
+
+                if (res.success) {
+                    const ids = pendingTxs.map(tx => tx.id);
+                    await db.transactions.where('id').anyOf(ids).modify({ sync_status: 'synced' });
+                    synced += ids.length;
+                } else {
+                    failed += pendingTxs.length;
+                    console.error("SyncManager: Bulk transaction sync failed", res.error);
                 }
             }
 
-            // 2. Sync Categories (Create)
+            // 2. Bulk Categories (Create)
             const pendingCats = await db.categories.where('sync_status').equals('created').toArray();
-            for (const cat of pendingCats) {
-                try {
-                    const commitType = cat.commitment_type || (cat.type === 'fixed' ? 'fixed' : null);
-                    // Pass frequency fields
-                    const res = await addCategory(cat.name, commitType, cat.budget_limit, cat.is_pinned, cat.frequency_months, cat.frequency_start); // turbo-all
-                    if (res.success) {
-                        await db.categories.update(cat.id, { sync_status: 'synced' });
-                        synced++;
-                    } else {
-                        failed++;
-                    }
-                } catch (e) {
-                    failed++;
-                    console.error("SyncManager: Failed to sync category", cat.id, e);
+            if (pendingCats.length > 0) {
+                const res = await bulkCreateCategories(pendingCats.map(cat => ({
+                    id: cat.id,
+                    name: cat.name,
+                    budget_limit: cat.budget_limit,
+                    type: cat.type,
+                    commitment_type: cat.commitment_type,
+                    is_pinned: cat.is_pinned,
+                    frequency_months: cat.frequency_months,
+                    frequency_start: cat.frequency_start
+                })));
+
+                if (res.success) {
+                    const ids = pendingCats.map(c => c.id);
+                    await db.categories.where('id').anyOf(ids).modify({ sync_status: 'synced' });
+                    synced += ids.length;
+                } else {
+                    failed += pendingCats.length;
+                    console.error("SyncManager: Bulk category sync failed", res.error);
                 }
             }
 
-            // 2b. Sync Categories (Update)
+            // 2b. Categories (Update) - Keep Sequential
             const updatedCats = await db.categories.where('sync_status').equals('updated').toArray();
             for (const cat of updatedCats) {
                 try {
@@ -258,24 +231,27 @@ export function SyncManager() {
                 }
             }
 
-            // 3. Sync Debts (Create)
+            // 3. Bulk Debts (Create)
             const pendingDebts = await db.debts.where('sync_status').equals('created').toArray();
-            for (const debt of pendingDebts) {
-                try {
-                    const res = await addDebt(debt.name, debt.total_balance, debt.interest_rate);
-                    if (res.success) {
-                        await db.debts.update(debt.id, { sync_status: 'synced' });
-                        synced++;
-                    } else {
-                        failed++;
-                    }
-                } catch (e) {
-                    failed++;
-                    console.error("SyncManager: Failed to sync debt", debt.id, e);
+            if (pendingDebts.length > 0) {
+                const res = await bulkCreateDebts(pendingDebts.map(d => ({
+                    id: d.id,
+                    name: d.name,
+                    total_balance: d.total_balance,
+                    interest_rate: d.interest_rate
+                })));
+
+                if (res.success) {
+                    const ids = pendingDebts.map(d => d.id);
+                    await db.debts.where('id').anyOf(ids).modify({ sync_status: 'synced' });
+                    synced += ids.length;
+                } else {
+                    failed += pendingDebts.length;
+                    console.error("SyncManager: Bulk debt sync failed", res.error);
                 }
             }
 
-            // 4. Sync Transactions (Update) - MISSING BEFORE
+            // 4. Transactions (Update) - Keep Sequential
             const updatedTxs = await db.transactions.where('sync_status').equals('updated').toArray();
             for (const tx of updatedTxs) {
                 try {
@@ -293,7 +269,7 @@ export function SyncManager() {
                 }
             }
 
-            // 5. Sync Debts (Update) - MISSING BEFORE
+            // 5. Debts (Update) - Keep Sequential
             const updatedDebts = await db.debts.where('sync_status').equals('updated').toArray();
             for (const debt of updatedDebts) {
                 try {

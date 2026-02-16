@@ -48,16 +48,12 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
             setShowAddForm(false);
 
             // Server
-            const res = await addDebt(name, balance, 0);
+            const res = await addDebt(name, balance, 0, tempId);
 
             // Reconcile ID if successful
-            if (res.success && res.id) {
-                await db.debts.delete(tempId);
-                await db.debts.put({
-                    ...newDebt,
-                    id: res.id,
-                    sync_status: 'synced'
-                });
+            if (res.success) {
+                // Since we passed the ID, server used it. No need to delete/put.
+                await db.debts.update(tempId, { sync_status: 'synced' });
             }
         } catch (err) {
             console.error("Failed to add debt", err);
@@ -101,24 +97,11 @@ export function DebtsClient({ initialDebts }: { initialDebts: Debt[] }) {
 
             // 3. Server Action
             // addTransaction handles the debt balance update on server too
-            const res = await addTransaction(amount, `Payment for ${payDebt.name}`, 'debt_payment', undefined, payDebt.id);
+            const res = await addTransaction(amount, `Payment for ${payDebt.name}`, 'debt_payment', undefined, payDebt.id, undefined, tempTxId);
 
             // Reconcile Transaction ID
-            if (res.success && res.transactionId) {
-                await db.transactions.delete(tempTxId);
-                await db.transactions.put({
-                    ...tx,
-                    id: res.transactionId,
-                    sync_status: 'synced'
-                });
-
-                // Also mark debt as synced since we updated it via transaction on server?
-                // Actually server side addTransaction updates the debt balance. 
-                // We should mark the LOCAL debt as synced too so SyncManager doesn't try to update it again?
-                // But SyncManager only syncs 'updated' debts.
-                // Our local update set it to 'updated'.
-                // If we don't set it to 'synced', SyncManager will call updateDebt later.
-                // updateDebt works, so it's not critical, but efficient to mark it synced.
+            if (res.success) {
+                await db.transactions.update(tempTxId, { sync_status: 'synced' });
                 await db.debts.update(payDebt.id, { sync_status: 'synced' });
             }
 
