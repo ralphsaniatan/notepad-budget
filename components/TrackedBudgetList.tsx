@@ -5,7 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, LocalCategory } from "@/lib/db";
 import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { CategorySheet, Category } from "@/components/CategorySheet";
+import { Category } from "@/components/CategorySheet";
+import { EditCategorySheet } from "@/components/EditCategorySheet";
 
 // Helper: Determine if the current month is a payment month for a frequency category
 function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMonths: number, currentIsoMonth: string): boolean {
@@ -191,7 +192,7 @@ export function TrackedBudgetList() {
 
             {/* Standardized CategorySheet */}
             {editingBudget && (
-                <CategorySheet
+                <EditCategorySheet
                     category={{
                         ...editingBudget,
                         commitment_type: editingBudget.commitment_type || (editingBudget.type === 'fixed' ? 'fixed' : null),
@@ -203,7 +204,8 @@ export function TrackedBudgetList() {
                         is_commitment: c.is_commitment || c.type === 'fixed'
                     } as Category))}
                     onClose={() => setEditingBudget(null)}
-                    onSave={() => setEditingBudget(null)}
+                    onUpdate={() => setEditingBudget(null)}
+                    onDelete={() => setEditingBudget(null)}
                 />
             )}
         </>

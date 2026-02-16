@@ -1,0 +1,411 @@
+"use client";
+
+import { useState } from "react";
+import { X, ArrowRightLeft } from "lucide-react";
+import { updateCategory, deleteCategory, transferCategoryBalance } from "@/app/actions";
+import { toast } from "sonner";
+import { db } from "@/lib/db";
+import { useLiveQuery } from "dexie-react-hooks";
+import { Category } from "./types";
+
+// Currency helper
+const currency = (amount: number) =>
+    new Intl.NumberFormat('en-AE', { style: 'currency', currency: 'AED', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+
+interface EditCategorySheetProps {
+    category: Category;
+    allCategories: Category[];
+    onClose: () => void;
+    onUpdate: (c: Category) => void;
+    onDelete: (id: string) => void;
+}
+
+export function EditCategorySheet({
+    category,
+    allCategories,
+    onClose,
+    onUpdate,
+    onDelete
+}: EditCategorySheetProps) {
+    const [activeTab, setActiveTab] = useState<'details' | 'transfer'>('details');
+
+    // -- Details State --
+    const [name, setName] = useState(category.name);
+    const initialType = category.commitment_type || (category.is_commitment ? 'fixed' : null);
+    const [commitmentType, setCommitmentType] = useState<'fixed' | 'variable_fixed' | null>(initialType);
+
+    // Limits with Math Support
+    const initialLimit = category.budget_limit ? category.budget_limit * (category.frequency_months || 1) : 0;
+    const [budgetLimit, setBudgetLimit] = useState(initialLimit > 0 ? initialLimit.toString() : "");
+
+    const computeAndSetLimit = () => {
+        try {
+            // Allow basic math (sanitized)
+            // eslint-disable-next-line no-useless-escape
+            const sanitized = budgetLimit.replace(/[^0-9\+\-\*\/\.]/g, '');
+            if (!sanitized) return;
+            // eslint-disable-next-line no-eval
+            const result = eval(sanitized);
+            if (isFinite(result) && result >= 0) {
+                setBudgetLimit(parseFloat(result).toFixed(2));
+            }
+        } catch (e) {
+            // Ignore invalid math
+            console.error("Math error", e);
+        }
+    };
+
+    const [frequency, setFrequency] = useState(category.frequency_months || 1);
+    const [frequencyStart, setFrequencyStart] = useState(() => {
+        if (category.frequency_start) {
+            const d = new Date(category.frequency_start);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+    const [isPinned, setIsPinned] = useState(category.is_pinned || false);
+
+    // -- Transfer State --
+    const [transferAmount, setTransferAmount] = useState("");
+    const [transferTargetId, setTransferTargetId] = useState("");
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // -- Live Data for Transfer --
+    const currentMonthIso = new Date().toISOString().slice(0, 7) + '-01';
+    const transactions = useLiveQuery(() => {
+        return db.transactions
+            .filter(t => t.date.startsWith(currentMonthIso.slice(0, 7)) && t.category_id === category.id)
+            .toArray();
+    }, [category.id]);
+
+    // Calculate Remaining for Transfer context
+    const spent = transactions?.reduce((sum, t) => sum + (t.type === 'expense' ? Number(t.amount) : 0), 0) || 0;
+    const balance = category.balance || 0;
+    const monthlyLimit = category.budget_limit || 0;
+    const freq = category.frequency_months || 1;
+
+    // Simplified remaining calculation matching TrackedBudgetList
+    const totalAvailable = (monthlyLimit * freq) + balance;
+    const remaining = totalAvailable - spent;
+
+    const handleUpdate = async () => {
+        if (!name.trim()) return;
+        computeAndSetLimit(); // Ensure math is resolved
+        setIsSubmitting(true);
+
+        const limit = parseFloat(budgetLimit) || 0;
+        const startVal = frequency > 1 ? `${frequencyStart}-01` : undefined;
+        const finalLimit = limit / frequency; // Monthly limit stored in DB
+
+        try {
+            await updateCategory(category.id, name, commitmentType, finalLimit, isPinned, frequency, startVal);
+            onUpdate({
+                ...category,
+                name,
+                commitment_type: commitmentType,
+                is_commitment: !!commitmentType,
+                budget_limit: finalLimit,
+                is_pinned: isPinned,
+                frequency_months: frequency,
+                frequency_start: startVal
+            });
+            toast.success("Category updated");
+            onClose();
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to update");
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!confirm("Delete this category? Transactions will become uncategorized.")) return;
+
+        setIsSubmitting(true);
+        try {
+            await deleteCategory(category.id);
+            onDelete(category.id);
+            toast.success("Category deleted");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to delete");
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleTransfer = async () => {
+        if (!transferTargetId || !transferAmount) return;
+        setIsSubmitting(true);
+        const amount = parseFloat(transferAmount);
+        if (isNaN(amount) || amount <= 0) {
+            toast.error("Invalid amount");
+            setIsSubmitting(false);
+            return;
+        }
+
+        try {
+            // Optimistic Update (Local Dexie)
+            await db.categories.update(category.id, { balance: (category.balance || 0) - amount });
+            const targetCatLocal = await db.categories.get(transferTargetId);
+            if (targetCatLocal) {
+                await db.categories.update(transferTargetId, { balance: (targetCatLocal.balance || 0) + amount });
+            }
+
+            // Server Sync
+            const res = await transferCategoryBalance(category.id, transferTargetId, amount);
+
+            if (res.success) {
+                toast.success("Transfer successful");
+                onUpdate({
+                    ...category,
+                    balance: (category.balance || 0) - amount
+                });
+                onClose();
+            } else {
+                toast.error(res.error || "Transfer failed");
+                await db.categories.update(category.id, { balance: category.balance });
+                if (targetCatLocal) await db.categories.update(transferTargetId, { balance: targetCatLocal.balance });
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error("Transfer failed");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-t-2xl p-6 pb-12 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h2 className="text-lg font-bold text-stone-900">Edit Category</h2>
+                        <p className="text-xs text-stone-400">Manage details or move funds</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-stone-100 rounded-full hover:bg-stone-200 text-stone-500">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="flex bg-stone-100 p-1 rounded-xl">
+                    <button
+                        onClick={() => setActiveTab('details')}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'details' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-600'}`}
+                    >
+                        Details
+                    </button>
+                    <button
+                        onClick={() => {
+                            setActiveTab('transfer');
+                            if (remaining > 0) setTransferAmount(remaining.toFixed(2));
+                        }}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'transfer' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-600'}`}
+                    >
+                        Move Money
+                    </button>
+                </div>
+
+                {activeTab === 'details' ? (
+                    <div className="space-y-6">
+                        {/* Name */}
+                        <div className="space-y-4">
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                placeholder="Category Name"
+                                className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                            />
+
+                            {/* Type Selection */}
+                            <div className="space-y-2">
+                                <div className="text-xs font-bold text-stone-400 uppercase tracking-widest">Type</div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button
+                                        onClick={() => setCommitmentType(null)}
+                                        className={`p-3 rounded-lg border text-center transition-all ${commitmentType === null ? "bg-stone-900 text-white border-stone-900" : "bg-white border-stone-200 text-stone-600 hover:border-stone-400"}`}
+                                    >
+                                        <div className="text-sm font-bold">Standard</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setCommitmentType('fixed')}
+                                        className={`p-3 rounded-lg border text-center transition-all ${commitmentType === 'fixed' ? "bg-blue-600 text-white border-blue-600" : "bg-white border-stone-200 text-stone-600 hover:border-stone-400"}`}
+                                    >
+                                        <div className="text-sm font-bold">Fixed</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setCommitmentType('variable_fixed')}
+                                        className={`p-3 rounded-lg border text-center transition-all ${commitmentType === 'variable_fixed' ? "bg-purple-600 text-white border-purple-600" : "bg-white border-stone-200 text-stone-600 hover:border-stone-400"}`}
+                                    >
+                                        <div className="text-sm font-bold">Needs</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Calculator Budget Input */}
+                            <div className="space-y-2">
+                                <label className="text-xs uppercase font-bold tracking-widest text-stone-400">
+                                    {frequency > 1 ? "Total Bill Amount (AED)" : (commitmentType === 'fixed' ? "Fixed Amount (AED)" : "Monthly Limit (AED)")}
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="text"
+                                    value={budgetLimit}
+                                    onChange={e => setBudgetLimit(e.target.value)}
+                                    onBlur={computeAndSetLimit}
+                                    placeholder="0.00"
+                                    className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-mono font-bold outline-none focus:border-stone-900"
+                                />
+                                {activeTab === 'details' && (
+                                    <div className="flex gap-2 justify-end">
+                                        {['+', '-', '×', '÷'].map(op => (
+                                            <button
+                                                key={op}
+                                                type="button"
+                                                onClick={() => {
+                                                    const symbol = op === '×' ? '*' : op === '÷' ? '/' : op;
+                                                    setBudgetLimit(prev => prev + symbol);
+                                                }}
+                                                className="w-8 h-8 rounded bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold"
+                                            >
+                                                {op}
+                                            </button>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={computeAndSetLimit}
+                                            className="w-8 h-8 rounded bg-stone-800 text-white font-bold"
+                                        >
+                                            =
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Pin Toggle */}
+                        <label className="flex items-center gap-2 px-3 py-2 bg-stone-50 border border-stone-100 rounded-lg cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={isPinned}
+                                onChange={e => setIsPinned(e.target.checked)}
+                                className="rounded text-stone-900 focus:ring-stone-900"
+                            />
+                            <span className="text-xs font-bold text-stone-600 uppercase tracking-wide">Pin to Main Budget</span>
+                        </label>
+
+                        {/* Frequency Logic */}
+                        {(commitmentType === 'fixed' || commitmentType === 'variable_fixed') && (
+                            <div className="space-y-4 animate-in slide-in-from-top-1 fade-in duration-200 pt-2 border-t border-stone-100">
+                                <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Frequency</label>
+                                        {frequency > 1 && (
+                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                                Monthly: {currency((parseFloat(budgetLimit) || 0) / frequency)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <select
+                                        value={frequency}
+                                        onChange={e => setFrequency(Number(e.target.value))}
+                                        className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900 appearance-none"
+                                    >
+                                        <option value={1}>Monthly</option>
+                                        <option value={2}>Every 2 Months</option>
+                                        <option value={3}>Every 3 Months (Quarterly)</option>
+                                        <option value={6}>Every 6 Months</option>
+                                        <option value={12}>Yearly</option>
+                                    </select>
+                                </div>
+                                {frequency > 1 && (
+                                    <div className="space-y-2">
+                                        <label className="text-xs uppercase font-bold tracking-widest text-stone-400">Payment Starts</label>
+                                        <input
+                                            type="month"
+                                            value={frequencyStart}
+                                            onChange={e => setFrequencyStart(e.target.value)}
+                                            className="w-full p-4 bg-stone-50 border-b-2 border-stone-200 text-lg font-bold outline-none focus:border-stone-900"
+                                        />
+                                        <p className="text-[10px] text-stone-400">The month you first pay the full bill</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex gap-4 pt-4">
+                            <button
+                                onClick={handleDelete}
+                                disabled={isSubmitting}
+                                className="flex-1 bg-red-50 text-red-600 py-4 rounded-xl text-lg font-bold hover:bg-red-100 transition-colors"
+                            >
+                                Delete
+                            </button>
+                            <button
+                                onClick={handleUpdate}
+                                disabled={isSubmitting || !name.trim()}
+                                className="flex-[2] bg-stone-900 text-white py-4 rounded-xl text-lg font-bold shadow-lg transition-transform active:scale-95"
+                            >
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    // Move Money Tab
+                    <div className="space-y-6 animate-in slide-in-from-right-2 fade-in duration-300">
+                        <div className="p-4 bg-stone-50 rounded-xl space-y-2">
+                            <span className="text-xs uppercase font-bold text-stone-400 tracking-widest">From</span>
+                            <div className="font-bold text-stone-900">{category.name}</div>
+                            <div className="flex justify-between items-center text-xs text-stone-500">
+                                <span>Remaining: {currency(remaining)}</span>
+                                <span className="bg-stone-200 px-1.5 py-0.5 rounded text-[10px] font-bold">Balance: {currency(balance)}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <span className="text-xs uppercase font-bold text-stone-400 tracking-widest">To Category</span>
+                            <select
+                                value={transferTargetId}
+                                onChange={e => setTransferTargetId(e.target.value)}
+                                className="w-full p-4 bg-white border border-stone-200 rounded-xl font-bold text-stone-900 outline-none focus:border-stone-900"
+                            >
+                                <option value="">Select Category</option>
+                                {allCategories
+                                    .filter(c => c.id !== category.id)
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} ({currency(c.budget_limit)})
+                                        </option>
+                                    ))
+                                }
+                            </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <span className="text-xs uppercase font-bold text-stone-400 tracking-widest">Amount</span>
+                            <input
+                                type="number"
+                                value={transferAmount}
+                                onChange={e => setTransferAmount(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full p-4 bg-white border border-stone-200 rounded-xl font-mono font-bold text-2xl text-stone-900 outline-none focus:border-stone-900"
+                            />
+                        </div>
+
+                        <button
+                            onClick={handleTransfer}
+                            disabled={isSubmitting || !transferTargetId || !transferAmount}
+                            className="w-full py-4 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <ArrowRightLeft size={18} />
+                            {isSubmitting ? "Transferring..." : "Confirm Transfer"}
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
