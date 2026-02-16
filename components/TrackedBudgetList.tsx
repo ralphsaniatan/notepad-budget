@@ -16,22 +16,15 @@ function isPaymentMonth(frequencyStart: string | null | undefined, frequencyMont
     return monthsDiff >= 0 && monthsDiff % frequencyMonths === 0;
 }
 
-export function TrackedBudgetList() {
+export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
     // 1. Get Pinned Categories
     const categories = useLiveQuery(() =>
         db.categories.filter(c => c.is_pinned === true).toArray()
     );
 
-    const [currentDate, setCurrentDate] = useState(new Date());
     const [collapsed, setCollapsed] = useState(false);
     const [editingBudget, setEditingBudget] = useState<LocalCategory | null>(null);
     const [showDepleted, setShowDepleted] = useState(false);
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const m = params.get('month');
-        if (m) setCurrentDate(new Date(m));
-    }, []);
 
     const isoMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
 

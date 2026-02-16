@@ -352,7 +352,7 @@ export function DashboardClient({ initialData }: DashboardData) {
 
                 {/* Tracked Budgets */}
                 <div className="mt-8">
-                    <TrackedBudgetList />
+                    <TrackedBudgetList currentDate={currentDate} />
                 </div>
 
                 {/* Transactions List */}
