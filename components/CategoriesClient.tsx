@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, Trash2, Pencil, Check } from "lucide-react";
 import { deleteCategory } from "@/app/actions";
 import { toast } from "sonner";
 import { CategorySheet, Category } from "@/components/CategorySheet";
+import { EditCategorySheet } from "@/components/EditCategorySheet";
 
 // Currency helper
 const currency = (amount: number) =>
@@ -174,27 +175,29 @@ export function CategoriesClient({ initialCategories }: { initialCategories: Cat
 
                 {categories.length === 0 && (
                     <div className="p-8 text-center text-stone-400 text-sm">
-                        No categories yet. Click "Add Category" to start.
+                        No categories yet. Click &quot;Add Category&quot; to start.
                     </div>
                 )}
             </div>
 
             {/* Shared Sheet for Add/Edit */}
-            {isSheetOpen && (
+            {isSheetOpen && !editingCat && (
                 <CategorySheet
+                    onClose={closeSheet}
+                    onSave={(savedCat) => {
+                        // Create
+                        setCategories((prev: Category[]) => [...prev, savedCat].sort((a, b) => a.name.localeCompare(b.name)));
+                    }}
+                />
+            )}
+            {isSheetOpen && editingCat && (
+                <EditCategorySheet
                     category={editingCat}
                     allCategories={categories}
                     onClose={closeSheet}
-                    onSave={(savedCat) => {
-                        if (editingCat) {
-                            // Update
-                            setCategories((prev: Category[]) => prev.map(c => c.id === savedCat.id ? savedCat : c));
-                        } else {
-                            // Create
-                            setCategories((prev: Category[]) => [...prev, savedCat].sort((a, b) => a.name.localeCompare(b.name)));
-                        }
-                        // Don't close immediately if transferring, handled inside
-                        if (!savedCat.balance) closeSheet();
+                    onUpdate={(savedCat) => {
+                        // Update
+                        setCategories((prev: Category[]) => prev.map(c => c.id === savedCat.id ? savedCat : c));
                     }}
                     onDelete={(id) => {
                         setCategories((prev: Category[]) => prev.filter(c => c.id !== id));
