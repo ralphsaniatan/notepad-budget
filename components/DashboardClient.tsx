@@ -15,15 +15,15 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
 import { addTransaction } from "@/app/actions";
+import { DashboardData } from "@/lib/types";
 
-type DashboardData = {
-    // Legacy props structure - used for default/context
-    initialData?: any;
+type DashboardClientProps = {
+    initialData?: DashboardData;
 };
 
 type TxType = 'expense' | 'income' | 'debt_payment';
 
-export function DashboardClient({ initialData }: DashboardData) {
+export function DashboardClient({ initialData }: DashboardClientProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingTx, setEditingTx] = useState<any>(null);
     const [showBreakdown, setShowBreakdown] = useState(false);
