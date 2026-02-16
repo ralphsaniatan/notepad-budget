@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { resolveEmail } from "./utils";
 
 export async function getUser() {
     const supabase = await createClient();
@@ -15,20 +16,13 @@ export async function signIn(formData: FormData) {
     const password = formData.get("password") as string;
     const supabase = await createClient();
 
-    // UNTESTED: Username Resolution
-    // If no '@', assume it's a username and look up the real email
-    if (!email.includes('@')) {
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('email')
-            .ilike('username', email)
-            .single();
+    // Resolve email from username if necessary
+    const resolvedEmail = await resolveEmail(supabase, email);
 
-        if (profile?.email) {
-            email = profile.email;
-        } else {
-            return { error: "Username not recognized. If this is your first time, please Login with Email, or Sign Up again." };
-        }
+    if (resolvedEmail) {
+        email = resolvedEmail;
+    } else {
+        return { error: "Username not recognized. If this is your first time, please Login with Email, or Sign Up again." };
     }
 
     const { error } = await supabase.auth.signInWithPassword({
