@@ -161,11 +161,6 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
                                                             {b.status === 'over' ? 'Over' : 'Left'}
                                                         </span>
                                                     </div>
-                                                    {b.isPaymentMonth && b.target_total && (
-                                                        <div className="text-[10px] text-stone-400 font-normal">
-                                                            Bill: {Math.abs(b.target_total).toFixed(0)}
-                                                        </div>
-                                                    )}
                                                 </div>
                                             </div>
 

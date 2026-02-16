@@ -792,23 +792,30 @@ export async function updateCategory(
     budget_limit: number,
     is_pinned: boolean = false,
     frequency_months: number = 1,
-    frequency_start?: string
+    frequency_start?: string,
+    balance?: number
 ) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
+    const updateData: any = {
+        name,
+        commitment_type,
+        is_commitment: !!commitment_type,
+        budget_limit,
+        is_pinned,
+        frequency_months,
+        frequency_start: frequency_months > 1 ? (frequency_start || null) : null
+    };
+
+    if (balance !== undefined) {
+        updateData.balance = balance;
+    }
+
     const { error } = await supabase
         .from('categories')
-        .update({
-            name,
-            commitment_type,
-            is_commitment: !!commitment_type,
-            budget_limit,
-            is_pinned,
-            frequency_months,
-            frequency_start: frequency_months > 1 ? (frequency_start || null) : null
-        })
+        .update(updateData)
         .eq('id', id)
         .eq('user_id', user.id);
 

@@ -117,19 +117,29 @@ export function MobileAddBar({ categories, debts, onAdd, isSubmitting }: {
             {/* --- MENU OVERLAY --- */}
             {mode === 'menu' && (
                 <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={handleClose}>
-                    <div className="absolute bottom-24 right-6 flex flex-col gap-4 items-end" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300 delay-75">
-                            <span className="text-white font-bold text-sm shadow-sm bg-black/50 px-2 py-1 rounded">New Category</span>
-                            <button onClick={openCategory} className="bg-white text-stone-900 shadow-xl p-4 rounded-full hover:bg-stone-50 active:scale-95 transition-transform">
-                                <Tag size={24} />
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                            <span className="text-white font-bold text-sm shadow-sm bg-black/50 px-2 py-1 rounded">New Transaction</span>
-                            <button onClick={openTransaction} className="bg-stone-900 text-white shadow-xl p-4 rounded-full hover:bg-black active:scale-95 transition-transform">
-                                <Banknote size={24} />
-                            </button>
-                        </div>
+                    <div className="absolute bottom-24 right-6 flex flex-col gap-3 items-end" onClick={e => e.stopPropagation()}>
+
+                        {/* New Category Button */}
+                        <button
+                            onClick={openCategory}
+                            className="bg-white text-stone-900 shadow-xl p-4 rounded-2xl flex items-center gap-3 w-48 hover:bg-stone-50 active:scale-95 transition-all animate-in slide-in-from-bottom-2 duration-200"
+                        >
+                            <div className="bg-stone-100 p-2 rounded-full">
+                                <Tag size={20} />
+                            </div>
+                            <span className="font-bold text-sm">New Category</span>
+                        </button>
+
+                        {/* New Transaction Button */}
+                        <button
+                            onClick={openTransaction}
+                            className="bg-stone-900 text-white shadow-xl p-4 rounded-2xl flex items-center gap-3 w-48 hover:bg-black active:scale-95 transition-all animate-in slide-in-from-bottom-2 duration-200"
+                        >
+                            <div className="bg-stone-800 p-2 rounded-full">
+                                <Banknote size={20} />
+                            </div>
+                            <span className="font-bold text-sm">New Transaction</span>
+                        </button>
                     </div>
                 </div>
             )}
