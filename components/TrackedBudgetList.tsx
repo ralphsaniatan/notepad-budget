@@ -46,7 +46,9 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
         const balance = cat.balance || 0;
         const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonthStr);
 
-        // Variable Limit: full bill in payment months, monthly allocation otherwise
+        // Variable Limit:
+        // Payment month: Full bill (limit * freq) is allocated from income.
+        // Off month: Monthly Allocation.
         const effectiveLimit = freq > 1
             ? (paymentMonth ? limit * freq : limit)
             : limit;

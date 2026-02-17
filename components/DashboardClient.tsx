@@ -101,8 +101,20 @@ export function DashboardClient({ initialData }: DashboardData) {
     const committedCategories = categories.filter(c => c.type === 'fixed' || c.budget_limit > 0);
 
     // Calculate Commitments based on Frequency
-    const totalCommitments = committedCategories.reduce((acc, c) => {
-        return acc + Number(c.budget_limit);
+    const totalCommitments = committedCategories.reduce((acc, cat) => {
+        const limit = Number(cat.budget_limit) || 0;
+        const balance = Number(cat.balance) || 0;
+        const freq = Number(cat.frequency_months) || 1;
+        const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonthStr);
+
+        // Logic must match server action:
+        // Payment month: Full bill (limit * freq) is allocated from income.
+        // Off month: Monthly Allocation.
+        const effectiveLimit = freq > 1
+            ? (paymentMonth ? limit * freq : limit)
+            : limit;
+
+        return acc + effectiveLimit;
     }, 0);
 
     breakdown.commitments = totalCommitments;

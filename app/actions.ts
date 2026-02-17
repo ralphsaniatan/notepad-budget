@@ -146,8 +146,10 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             });
 
             // Variable Limit Model:
-            // Payment month: full bill is due (limit * freq).
-            // Off month: only the monthly allocation (limit).
+            // Payment month: Full bill (limit * freq).
+            // We do NOT deduct balance here because SafeToSpend = (Income + Rollover) - Commitments.
+            // Rollover INCLUDES the balance. So we must subtract the full bill to "reserve" that money.
+            // Off month: Only the monthly allocation.
             const effectiveLimit = freq > 1
                 ? (paymentMonth ? limit * freq : limit)
                 : limit;
