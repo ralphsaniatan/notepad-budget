@@ -467,14 +467,22 @@ export function DashboardClient({ initialData }: DashboardData) {
 
 
                 {/* Debug Info */}
-                {initialData?.debug && (
-                    <div className="mt-8 p-4 bg-stone-100 rounded-lg text-xs font-mono break-all">
-                        <details>
-                            <summary className="cursor-pointer font-bold mb-2">Debug Info (Click to Expand)</summary>
-                            <pre>{JSON.stringify(initialData.debug, null, 2)}</pre>
-                        </details>
-                    </div>
-                )}
+                <div className="mt-8 p-4 bg-stone-100 rounded-lg text-xs font-mono break-all">
+                    <details>
+                        <summary className="cursor-pointer font-bold mb-2">Debug Tools</summary>
+                        <button
+                            onClick={async () => {
+                                const { getDebugInfo } = await import('@/app/actions');
+                                const data = await getDebugInfo();
+                                alert(JSON.stringify(data, null, 2));
+                            }}
+                            className="bg-stone-900 text-white px-3 py-1 rounded"
+                        >
+                            Show Calculation Debug
+                        </button>
+                        {initialData?.debug && <pre className="mt-2">{JSON.stringify(initialData.debug, null, 2)}</pre>}
+                    </details>
+                </div>
             </main>
 
             {/* Persistent Mobile Add Bar */}
