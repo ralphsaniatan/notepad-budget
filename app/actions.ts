@@ -132,9 +132,12 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             const freq = safeNum(cat.frequency_months) || 1;
             const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
 
-            // Always commit the FULL bill amount for multi-frequency categories.
-            // e.g. Rent 7300 every 2 months → always deduct 7300 from Safe to Spend.
-            const effectiveLimit = limit * freq;
+            // Variable Limit Model:
+            // Payment month: full bill is due (limit * freq).
+            // Off month: only the monthly allocation (limit).
+            const effectiveLimit = freq > 1
+                ? (paymentMonth ? limit * freq : limit)
+                : limit;
             totalCommitments += effectiveLimit;
 
             // Calculate Overspend
