@@ -23,8 +23,7 @@ type DashboardData = {
     breakdown?: { income: number, rollover: number, commitments: number, spent: number };
     userId?: string;
     email?: string;
-    // Debug Data
-    debug?: any[];
+
 };
 
 // Fallback for initial state or error
@@ -126,24 +125,14 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             .eq('user_id', user.id)
             .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0');
 
+
         let totalCommitments = 0;
-        const debugData: any[] = [];
 
         committedCategories?.forEach(cat => {
             const limit = safeNum(cat.budget_limit);
             const balance = safeNum(cat.balance);
             const freq = safeNum(cat.frequency_months) || 1;
             const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
-
-            debugData.push({
-                name: cat.name,
-                freq,
-                start: cat.frequency_start,
-                isoMonth,
-                isPaymentMonth: paymentMonth,
-                limit,
-                outcome: freq > 1 ? (paymentMonth ? limit * freq : limit) : limit
-            });
 
             // Variable Limit Model:
             // Payment month: Full bill (limit * freq).
@@ -166,7 +155,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             overspend += excess;
         });
 
-        console.log(`[SafeToSpend Debug] income: ${income}, rollover: ${rollover}, totalCommitments: ${totalCommitments}, spentVariable: ${spentVariable}, overspend: ${overspend}`);
+
 
         // Safe To Spend = (Income + Rollover) - Total Commitments - Variable Spent - Overspend
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
@@ -969,37 +958,7 @@ export async function getAllUserData() {
     };
 }
 
-// Debug Action to fetch raw category data
-export async function getDebugInfo() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
 
-    const now = new Date();
-    const isoMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-
-    const { data: committedCategories } = await supabase
-        .from('categories')
-        .select('id, name, budget_limit, frequency_months, frequency_start')
-        .eq('user_id', user.id)
-        .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0');
-
-    return committedCategories?.map(cat => {
-        const limit = Number(cat.budget_limit) || 0;
-        const freq = Number(cat.frequency_months) || 1;
-        const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
-
-        return {
-            name: cat.name,
-            freq,
-            start: cat.frequency_start,
-            isoMonth,
-            isPaymentMonth: paymentMonth,
-            limit,
-            outcome: freq > 1 ? (paymentMonth ? limit * freq : limit) : limit
-        };
-    }) || [];
-}
 
 export async function resetUserData() {
     const supabase = await createClient();
