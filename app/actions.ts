@@ -23,6 +23,8 @@ type DashboardData = {
     breakdown?: { income: number, rollover: number, commitments: number, spent: number };
     userId?: string;
     email?: string;
+    // Debug Data
+    debug?: any[];
 };
 
 // Fallback for initial state or error
@@ -120,17 +122,28 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
         // 3. Get Commitments & Calculate Overspend
         const { data: committedCategories } = await supabase
             .from('categories')
-            .select('id, budget_limit, is_pinned, balance, frequency_months, frequency_start')
+            .select('id, name, budget_limit, is_pinned, balance, frequency_months, frequency_start')
             .eq('user_id', user.id)
             .or('commitment_type.eq.fixed,commitment_type.eq.variable_fixed,is_commitment.eq.true,budget_limit.gt.0');
 
         let totalCommitments = 0;
+        const debugData: any[] = [];
 
         committedCategories?.forEach(cat => {
             const limit = safeNum(cat.budget_limit);
             const balance = safeNum(cat.balance);
             const freq = safeNum(cat.frequency_months) || 1;
             const paymentMonth = isPaymentMonth(cat.frequency_start, freq, isoMonth);
+
+            debugData.push({
+                name: cat.name,
+                freq,
+                start: cat.frequency_start,
+                isoMonth,
+                isPaymentMonth: paymentMonth,
+                limit,
+                outcome: freq > 1 ? (paymentMonth ? limit * freq : limit) : limit
+            });
 
             // Variable Limit Model:
             // Payment month: full bill is due (limit * freq).
@@ -150,6 +163,8 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
             const excess = Math.max(0, actual - available);
             overspend += excess;
         });
+
+        console.log(`[SafeToSpend Debug] income: ${income}, rollover: ${rollover}, totalCommitments: ${totalCommitments}, spentVariable: ${spentVariable}, overspend: ${overspend}`);
 
         // Safe To Spend = (Income + Rollover) - Total Commitments - Variable Spent - Overspend
         const safeToSpend = (income + rollover) - totalCommitments - spentVariable - overspend;
