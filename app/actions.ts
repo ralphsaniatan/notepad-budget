@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase-server";
+import { getAuthenticatedUser } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import { unstable_noStore as noStore } from "next/cache";
 
@@ -37,10 +37,9 @@ const DEFAULT_DASHBOARD: DashboardData = {
 
 export async function getDashboardData(targetDate?: string): Promise<DashboardData> {
     noStore(); // Disable all caching for this data
-    const supabase = await createClient();
+    const { user, supabase } = await getAuthenticatedUser();
 
     try {
-        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return DEFAULT_DASHBOARD;
 
         // 1. Get Current Month (or Target)
@@ -221,8 +220,7 @@ export async function getDashboardData(targetDate?: string): Promise<DashboardDa
 }
 
 export async function getTransactions(offset: number = 0, limit: number = 10, monthIso?: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return [];
 
     let query = supabase
@@ -285,8 +283,7 @@ export type TrackedBudget = {
 };
 
 export async function getTrackedBudgets(): Promise<TrackedBudget[]> {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return [];
 
     const now = new Date();
@@ -369,10 +366,7 @@ export async function addTransaction(
     debtId?: string,
     customDate?: string // Optional: ISO date string from offline sync
 ) {
-    const supabase = await createClient();
-
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     // Determine which month this transaction belongs to
@@ -439,8 +433,7 @@ export async function addTransaction(
 }
 
 export async function closeMonth() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     try {
@@ -548,8 +541,7 @@ export async function closeMonth() {
 }
 
 export async function addDebt(name: string, balance: number, rate: number) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false };
 
     const { data, error } = await supabase
@@ -577,8 +569,7 @@ export async function addCategory(
     frequency_months: number = 1,
     frequency_start?: string
 ) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -612,8 +603,7 @@ export async function updateTransaction(
     categoryId?: string,
     debtId?: string
 ) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -640,8 +630,7 @@ export async function updateTransaction(
 // ... existing code ...
 
 export async function deleteTransaction(id: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -670,8 +659,7 @@ export type SavingsGoal = {
 };
 
 export async function getSavingsGoals(): Promise<SavingsGoal[]> {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return [];
 
     const { data } = await supabase
@@ -684,8 +672,7 @@ export async function getSavingsGoals(): Promise<SavingsGoal[]> {
 }
 
 export async function addSavingsGoal(name: string, targetAmount: number, targetDate: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { data: newGoal, error } = await supabase
@@ -710,8 +697,7 @@ export async function addSavingsGoal(name: string, targetAmount: number, targetD
 }
 
 export async function contributeToSavings(goalId: string, amount: number, goalName: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     // 1. Log as Expense (reduces Safe to Spend)
@@ -746,8 +732,7 @@ export async function contributeToSavings(goalId: string, amount: number, goalNa
 }
 
 export async function updateSavingsGoal(id: string, name: string, targetAmount: number, targetDate: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -766,8 +751,7 @@ export async function updateSavingsGoal(id: string, name: string, targetAmount: 
 }
 
 export async function deleteSavingsGoal(id: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -793,8 +777,7 @@ export async function updateCategory(
     frequency_start?: string,
     balance?: number
 ) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const updateData: any = {
@@ -824,8 +807,7 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(id: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     // Check usage? Ideally yes, but for MVP we might just let foreign keys handle it (set null or cascade)
@@ -845,8 +827,7 @@ export async function deleteCategory(id: string) {
 }
 
 export async function transferCategoryBalance(sourceId: string, targetId: string, amount: number) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     if (amount <= 0) return { success: false, error: "Invalid amount" };
@@ -897,8 +878,7 @@ export async function transferCategoryBalance(sourceId: string, targetId: string
 // --- Debt Management ---
 
 export async function updateDebt(id: string, name: string, balance: number, rate: number) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -914,8 +894,7 @@ export async function updateDebt(id: string, name: string, balance: number, rate
 }
 
 export async function deleteDebt(id: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     const { error } = await supabase
@@ -932,8 +911,7 @@ export async function deleteDebt(id: string) {
 // --- Sync / Seeding Actions ---
 
 export async function getAllUserData() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     // Get Months (for context)
@@ -961,8 +939,7 @@ export async function getAllUserData() {
 
 
 export async function resetUserData() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user, supabase } = await getAuthenticatedUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
     try {
