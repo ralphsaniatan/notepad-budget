@@ -36,10 +36,17 @@ export function TrackedBudgetList({ currentDate }: { currentDate: Date }) {
     if (categories.length === 0) return null;
 
     // 3. Calculate Logic
+    const spentByCategory: Record<string, number> = {};
+    for (const t of transactions) {
+        if (t.type === 'expense' || t.type === 'debt_payment') {
+            if (t.category_id) {
+                spentByCategory[t.category_id] = (spentByCategory[t.category_id] || 0) + Number(t.amount);
+            }
+        }
+    }
+
     const budgets = categories.map(cat => {
-        const spent = transactions
-            .filter(t => t.category_id === cat.id && (t.type === 'expense' || t.type === 'debt_payment'))
-            .reduce((sum, t) => sum + Number(t.amount), 0);
+        const spent = spentByCategory[cat.id] || 0;
 
         const limit = Number(cat.budget_limit);
         const freq = cat.frequency_months || 1;
