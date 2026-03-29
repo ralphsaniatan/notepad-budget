@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signOut } from "@/app/auth/actions";
 import { PaperCard } from "@/components/ui/PaperCard";
 import clsx from "clsx";
 import Link from "next/link";
