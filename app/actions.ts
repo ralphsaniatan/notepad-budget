@@ -828,9 +828,21 @@ export async function deleteCategory(id: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Not authenticated" };
 
-    // Check usage? Ideally yes, but for MVP we might just let foreign keys handle it (set null or cascade)
-    // Our schema: category_id references categories(id) on delete set null. So transactions become "uncategorized".
-    // Safe to delete.
+    // Check usage before deletion
+    const { count, error: countError } = await supabase
+        .from('transactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('category_id', id)
+        .eq('user_id', user.id);
+
+    if (countError) {
+        console.error("Check Usage Error:", countError);
+        return { success: false, error: "Failed to check usage" };
+    }
+
+    if (count && count > 0) {
+        return { success: false, error: `Cannot delete: Category used in ${count} transactions` };
+    }
 
     const { error } = await supabase
         .from('categories')
