@@ -29,14 +29,6 @@ export function DashboardClient({ initialData }: DashboardData) {
     const [showBreakdown, setShowBreakdown] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
 
-    // Live Query for Data
-    const transactions = useLiveQuery(() => db.transactions.orderBy('date').reverse().toArray()) || [];
-    const categories = useLiveQuery(() => db.categories.toArray()) || [];
-    const debts = useLiveQuery(() => db.debts.toArray()) || [];
-
-    // Pagination State (Client-side slicing of local data)
-    const [limit, setLimit] = useState(10);
-
     // Date Logic
     const [currentDate, setCurrentDate] = useState(new Date());
     const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -54,16 +46,37 @@ export function DashboardClient({ initialData }: DashboardData) {
         window.location.href = `/?month=${isoParams}`;
     };
 
+    const currentMonthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const isoMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const queryPrefix = isoMonthStr.substring(0, 7); // YYYY-MM
+
+    // Pagination State (Client-side slicing of local data)
+    const [limit, setLimit] = useState(10);
+
+    // Reset pagination when month changes
+    useEffect(() => {
+        setLimit(10);
+    }, [queryPrefix]);
+
+    // Live Query for Data
+    const transactions = useLiveQuery(
+        () => db.transactions
+            .where('date').startsWith(queryPrefix)
+            .reverse()
+            .toArray(),
+        [queryPrefix]
+    ) || [];
+
+    const categories = useLiveQuery(() => db.categories.toArray()) || [];
+    const debts = useLiveQuery(() => db.debts.toArray()) || [];
+
     const handleLoadMore = () => {
         setLimit(prev => prev + 10);
     };
 
-    const currentMonthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const isoMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`;
-
     // --- Calculations (Client Side) ---
     // Filter transactions by month
-    const currentMonthTransactions = transactions.filter(t => t.date.startsWith(isoMonthStr.substring(0, 7)));
+    const currentMonthTransactions = transactions;
 
     let safeToSpend = 0;
     let spent = 0;
